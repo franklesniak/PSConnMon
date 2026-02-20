@@ -4,7 +4,7 @@
 
 **⚠️ Please do NOT report security vulnerabilities through public GitHub issues.**
 
-If you discover a security vulnerability in this project, please report it privately using one of the following methods:
+If you discover a security vulnerability in this project, please report it privately using the following method:
 
 ### Option 1: GitHub Security Advisories (Recommended)
 
@@ -15,13 +15,6 @@ If you discover a security vulnerability in this project, please report it priva
 3. Fill out the security advisory form with details about the vulnerability
 
 This allows for private discussion and coordinated disclosure.
-
-### Option 2: Email
-
-Contact the maintainers directly at:
-
-<!-- TODO: Replace with your security contact email -->
-- Email: [security contact email]
 
 ### What to Include
 

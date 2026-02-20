@@ -136,17 +136,14 @@ This repository uses modular instruction files for language-specific standards:
 | Markdown/Docs | `.github/instructions/docs.instructions.md` | `**/*.md` |
 | PowerShell | `.github/instructions/powershell.instructions.md` | `**/*.ps1` |
 | Python | `.github/instructions/python.instructions.md` | `**/*.py` |
-| Terraform | `.github/instructions/terraform.instructions.md` | `**/*.tf`, `**/*.tfvars`, `**/*.tftest.hcl` |
 
-**Note:** The PowerShell instructions include comprehensive guidance on Pester testing. The Terraform instructions include comprehensive guidance on Terraform Test framework.
+**Note:** The PowerShell instructions include comprehensive guidance on Pester testing.
 
 **To customize for your project:**
 
 - Remove instruction files for languages you don't use
 - Add new instruction files for additional languages as needed
 - Update this table to reflect your project's languages
-
-> **Terraform note:** If your project does not use Terraform, remove the Terraform instruction file (`.github/instructions/terraform.instructions.md`), remove the Terraform row from the table above, and remove Terraform-related entries from the Linting Configurations and Testing Tools sections below.
 
 ## Agent Instruction Files
 
@@ -175,7 +172,6 @@ This repository includes linting tool configurations that align with the coding 
 | --- | --- | --- |
 | PSScriptAnalyzer | `.github/linting/PSScriptAnalyzerSettings.psd1` | PowerShell formatting/linting (OTBS style) |
 | markdownlint | `.markdownlint.jsonc` | Markdown linting |
-| TFLint | `.tflint.hcl` | Terraform linting |
 
 ### Running Linters
 
@@ -191,22 +187,14 @@ npm run lint:md
 Invoke-ScriptAnalyzer -Path .\script.ps1 -Settings .\.github\linting\PSScriptAnalyzerSettings.psd1
 ```
 
-**Terraform:**
-
-```bash
-terraform fmt -check -recursive
-tflint --recursive
-```
-
 ## Testing Tools
 
-This repository includes testing infrastructure for Python, PowerShell, and Terraform:
+This repository includes testing infrastructure for Python and PowerShell:
 
 | Language | Framework | Configuration | Test Location |
 | --- | --- | --- | --- |
 | Python | pytest | `pyproject.toml` (`[tool.pytest.ini_options]`) | `tests/` |
 | PowerShell | Pester 5.x | Inline in `.github/workflows/powershell-ci.yml` | `tests/PowerShell/` |
-| Terraform | Terraform Test (requires Terraform 1.6+) | Built-in | `modules/*/tests/` or `tests/` |
 
 ### Running Tests
 
@@ -222,8 +210,3 @@ pytest tests/ -v --cov --cov-report=term-missing
 Invoke-Pester -Path tests/ -Output Detailed
 ```
 
-**Terraform:**
-
-```bash
-terraform test -verbose
-```

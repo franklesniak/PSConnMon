@@ -22,7 +22,7 @@ contact_links:
   # CUSTOMIZE: Update the URL below by replacing `OWNER/REPO` with your org/repo name.
   # NOTE: blob/HEAD is used instead of blob/main to support repos with non-main default branches.
   - name: 📝 Contributing Guide
-    url: https://github.com/OWNER/REPO/blob/HEAD/CONTRIBUTING.md
+    url: https://github.com/franklesniak/PSConnMon/blob/HEAD/CONTRIBUTING.md
     about: Read the contributing guide before opening an issue
 
   # =============================================================================
@@ -56,7 +56,7 @@ contact_links:
   #    https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configuring-private-vulnerability-reporting-for-a-repository
   # =============================================================================
   - name: 🔒 Security Vulnerabilities
-    url: https://github.com/OWNER/REPO/security
+    url: https://github.com/franklesniak/PSConnMon/security
     about: Report security issues privately (do not open a public issue). Private vulnerability reporting is only available for public repositories.
 
   # =============================================================================
@@ -78,9 +78,9 @@ contact_links:
   # CUSTOMIZE: Uncomment the following block if your repository uses GitHub
   # Discussions for Q&A.
   # =============================================================================
-  # - name: 💬 Questions & Discussions
-  #   url: https://github.com/OWNER/REPO/discussions
-  #   about: Ask questions and discuss ideas (not for bug reports)
+  - name: 💬 Questions & Discussions
+    url: https://github.com/franklesniak/PSConnMon/discussions
+    about: Ask questions and discuss ideas (not for bug reports)
 
   # =============================================================================
   # SUPPORT / FAQ LINK (OPTIONAL)

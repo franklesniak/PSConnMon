@@ -72,14 +72,6 @@ pytest tests/ -v --cov --cov-report=term-missing
 Invoke-Pester -Path tests/ -Output Detailed
 ```
 
-### Terraform
-
-```bash
-terraform fmt -check -recursive
-tflint --recursive
-terraform test -verbose
-```
-
 ## Language-Specific Instructions
 
 This repository uses modular instruction files for language-specific coding
@@ -91,7 +83,6 @@ its pattern.**
 | Markdown/Docs | `.github/instructions/docs.instructions.md` | `**/*.md` |
 | PowerShell | `.github/instructions/powershell.instructions.md` | `**/*.ps1` |
 | Python | `.github/instructions/python.instructions.md` | `**/*.py` |
-| Terraform | `.github/instructions/terraform.instructions.md` | `**/*.tf`, `**/*.tfvars`, `**/*.tftest.hcl` |
 
 ## What Not to Do
 
