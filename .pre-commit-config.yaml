@@ -50,4 +50,3 @@ repos:
     rev: v0.20.0
     hooks:
       - id: markdownlint-cli2
-

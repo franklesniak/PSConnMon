@@ -471,6 +471,9 @@ function Get-PrimaryDnsServer {
     #
     # Version: 1.0.20260220.0
 
+    # Get-WmiObject is used only as a fallback for PowerShell 2.0 and below;
+    # the code already uses Get-CimInstance for PowerShell 3.0+.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWMICmdlet', '')]
     [CmdletBinding()]
     [OutputType([string])]
     param(
@@ -1096,7 +1099,7 @@ function Remove-OldLogFile {
     #
     # Version: 1.0.20260220.0
 
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     [OutputType([void])]
     param(
         [string]$Path
@@ -1104,7 +1107,11 @@ function Remove-OldLogFile {
 
     Get-ChildItem $Path -File |
         Where-Object { $_.LastWriteTimeUtc -lt (Get-Date).ToUniversalTime().AddHours(-48) } |
-        Remove-Item -Force -ErrorAction SilentlyContinue
+        ForEach-Object {
+            if ($PSCmdlet.ShouldProcess($_.FullName, 'Remove old log file')) {
+                Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+            }
+        }
 }
 
 function Get-PowerShellModuleUsingHashtable {
@@ -5448,7 +5455,7 @@ function Test-PowerShellModuleUpdatesAvailableUsingHashtable {
     return $boolResult
 }
 
-function Test-SharePermissions {
+function Test-SharePermission {
     # .SYNOPSIS
     # Tests read access to a list of shares.
     #
@@ -5464,10 +5471,10 @@ function Test-SharePermissions {
     #
     # .EXAMPLE
     # $shares = @([pscustomobject]@{Path='\\server\share1'}, [pscustomobject]@{Path='\\server\share2'})
-    # $valid = Test-SharePermissions -Shares $shares -LogDirectory "C:\Logs"
+    # $valid = Test-SharePermission -Shares $shares -LogDirectory "C:\Logs"
     #
     # .INPUTS
-    # None. You can't pipe objects to Test-SharePermissions.
+    # None. You can't pipe objects to Test-SharePermission.
     #
     # .OUTPUTS
     # System.Boolean. $true if all shares are accessible; $false otherwise.
@@ -5492,8 +5499,7 @@ function Test-SharePermissions {
             # We use -ErrorAction Stop to force the try/catch block to trigger on any error.
             [void](Get-ChildItem -Path $share.Path -ErrorAction Stop | Select-Object -First 1)
             Write-Verbose "Initial permission check for '$($share.Path)' successful."
-        }
-        catch {
+        } catch {
             # If any error occurs (Access Denied, Path Not Found, etc.), log it and fail.
             $strDetails = "FATAL: Initial permission check failed for share '$($share.Path)'. Error: $($_.Exception.Message.Trim())"
 
@@ -5642,7 +5648,7 @@ $arrSharesToTest = @(
 
 # --- Initial Permission Check ---
 Write-Verbose "Performing initial share permission checks..."
-if (-not (Test-SharePermissions -Shares $arrSharesToTest -LogDirectory $strLogDirectory)) {
+if (-not (Test-SharePermission -Shares $arrSharesToTest -LogDirectory $strLogDirectory)) {
     Write-Error "One or more share permission checks failed. See the error log for details. Script will now exit."
     # Exit with a non-zero exit code to indicate failure, useful for scheduled tasks.
     exit 1
@@ -5872,9 +5878,8 @@ $scriptblockShareAccessTest = {
         try {
             # Start the Get-ChildItem command in a separate process to avoid hanging the main script.
             $job = Start-Job -ScriptBlock {
-                param($Path)
                 # The -Force parameter can help with hidden or system files if necessary.
-                Get-ChildItem -Path $Path -Force -ErrorAction Stop | Select-Object -First 1
+                Get-ChildItem -Path $args[0] -Force -ErrorAction Stop | Select-Object -First 1
             } -ArgumentList $pscustomobjectShare.Path
 
             # Wait for the job to finish, but only for the specified timeout period.

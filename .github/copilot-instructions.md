@@ -209,4 +209,3 @@ pytest tests/ -v --cov --cov-report=term-missing
 ```powershell
 Invoke-Pester -Path tests/ -Output Detailed
 ```
-
