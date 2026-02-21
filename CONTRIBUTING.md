@@ -1,22 +1,5 @@
 # Contributing to This Project
 
-<!--
-TEMPLATE DESIGN DECISION: Placeholder Strategy
-
-This file uses OWNER/REPO placeholders (not generic <your-repo> syntax) because:
-- Enables bulk find-and-replace for template adopters (single operation)
-- CI automation can verify all placeholders are replaced (.github/workflows/check-placeholders.yml)
-- Results in working, copy-pastable commands after replacement
-- Consistent with issue templates and other template files
-
-Alternative considered: Generic angle-bracket syntax like <your-repository-clone-url>
-Rejected because: Harder to replace in bulk, produces non-working commands,
-inconsistent with other files that require real values (CI configs, package.json)
-
-See README.md Template Setup Checklist for adoption instructions.
-See OPTIONAL_CONFIGURATIONS.md for detailed customization guidance.
--->
-
 Thank you for your interest in contributing! This document provides guidelines for contributing to this repository.
 
 ## Python Version Requirements
@@ -35,8 +18,6 @@ This project requires a Python version that is currently in "bugfix" status acco
 
 See the [Python Developer's Guide - Versions](https://devguide.python.org/versions/) page for current version status.
 
-> **Template adopters:** Customize this section based on your project's specific Python version requirements. You may specify a minimum version (e.g., "Python 3.11+") or reference your project's own support policy.
-
 ### When to Update
 
 Check the [Python Developer's Guide - Versions](https://devguide.python.org/versions/) page annually (typically around October when new Python versions are released). Update the minimum required version when upstream support changes.
@@ -46,8 +27,6 @@ Check the [Python Developer's Guide - Versions](https://devguide.python.org/vers
 ## Development Setup
 
 ### 1. Clone the Repository
-
-<!-- CUSTOMIZE: Replace `OWNER/REPO` with your organization and repository name -->
 
 ```bash
 git clone https://github.com/franklesniak/PSConnMon.git
@@ -282,63 +261,10 @@ When submitting a pull request:
 
 If you have questions or encounter issues:
 
-<!-- CUSTOMIZE: Replace `OWNER/REPO` with your organization and repository name -->
-
 1. Check existing [Issues](https://github.com/franklesniak/PSConnMon/issues)
 2. Review the documentation in `.github/instructions/`
 3. Open a new issue with a clear description of the problem
 
 ## License
 
-<!--
-TEMPLATE ADOPTERS: Update this section if your project uses a license other than MIT.
-
-If using a different open source license (Apache 2.0, GPL, BSD, etc.):
-- Replace "MIT License" with your license name
-- Ensure consistency with the LICENSE file in the repository root
-
-If using a proprietary license:
-- Replace the entire contribution agreement text below
-- Consider adding Contributor License Agreement (CLA) requirements
-- Consult with legal counsel for appropriate contribution terms
-
-See OPTIONAL_CONFIGURATIONS.md "License Customization" section for detailed guidance.
--->
-
 By contributing to this project, you agree that your contributions will be licensed under the same license as the project (MIT License).
-
-## For Template Users
-
-<!--
-TEMPLATE ADOPTERS: This entire section is meta-documentation about the template itself.
-After you've reviewed and understood this content, you should:
-- Option A: Remove this entire section (recommended for most downstream projects)
-- Option B: Keep it if your project is also a template
-- Option C: Move relevant content to your own project documentation
-
-See OPTIONAL_CONFIGURATIONS.md for detailed guidance on CONTRIBUTING.md customization.
--->
-
-This repository is a template designed for projects that use GitHub Copilot for AI-assisted development.
-
-### Understanding the Instruction Files
-
-The `.github/instructions/` directory contains coding standards that guide GitHub Copilot's code generation:
-
-- **`docs.instructions.md`** - Documentation and Markdown writing standards
-- **`powershell.instructions.md`** - PowerShell coding conventions (OTBS style, v1.0 compatibility patterns)
-- **`python.instructions.md`** - Python coding standards (PEP 8, type hints, testing patterns)
-
-These instruction files are automatically applied by GitHub Copilot based on the file patterns specified in each file's front matter.
-
-### Customizing for Your Project
-
-You can customize these instruction files for your project's specific conventions:
-
-1. Edit the instruction files to match your team's coding standards
-2. Remove instruction files for languages you don't use
-3. Add new instruction files for additional languages as needed
-
-### First-Time Setup Validation
-
-After creating a new repository from this template, see the [Validating Your New Repository](README.md#validating-your-new-repository) section in the README for guidance on verifying your setup.

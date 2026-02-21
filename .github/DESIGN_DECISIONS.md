@@ -2,7 +2,7 @@
 
 This document records design decisions made during the creation and maintenance of `franklesniak/copilot-repo-template`. It serves as institutional memory to prevent re-litigation of settled decisions during code review.
 
-> **For consumers of this template:** This document is NOT an instruction guide. See [GETTING_STARTED_NEW_REPO.md](../GETTING_STARTED_NEW_REPO.md) or [GETTING_STARTED_EXISTING_REPO.md](../GETTING_STARTED_EXISTING_REPO.md) for setup instructions, and [OPTIONAL_CONFIGURATIONS.md](../OPTIONAL_CONFIGURATIONS.md) for customization options.
+> **Note:** This document records design decisions for the repository's configuration and tooling.
 
 ---
 
@@ -62,7 +62,7 @@ This relative link has been tested and confirmed to work correctly in rendered P
 - GitHub Enterprise Server (GHES) compatibility varies by version.
 
 If you need the link to work in PR drafts, GHES, or external contexts, replace with:
-`https://github.com/OWNER/REPO/blob/HEAD/CONTRIBUTING.md` (remembering to replace OWNER/REPO with your actual org/repo name).
+`https://github.com/franklesniak/PSConnMon/blob/HEAD/CONTRIBUTING.md`.
 
 ### Design Decision: Link Strategy in PR Template
 

@@ -1,8 +1,3 @@
-<!--
-Template users: see OPTIONAL_CONFIGURATIONS.md for guidance on tailoring this PR
-template. Delete this comment once the PR template is tailored for your needs.
--->
-
 ## Description
 
 <!-- Provide a brief description of the changes in this PR -->
