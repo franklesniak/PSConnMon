@@ -50,8 +50,8 @@ Check the [Python Developer's Guide - Versions](https://devguide.python.org/vers
 <!-- CUSTOMIZE: Replace `OWNER/REPO` with your organization and repository name -->
 
 ```bash
-git clone https://github.com/OWNER/REPO.git
-cd REPO
+git clone https://github.com/franklesniak/PSConnMon.git
+cd PSConnMon
 ```
 
 ### 2. Install Node.js Dependencies (for Markdown linting)
@@ -284,7 +284,7 @@ If you have questions or encounter issues:
 
 <!-- CUSTOMIZE: Replace `OWNER/REPO` with your organization and repository name -->
 
-1. Check existing [Issues](https://github.com/OWNER/REPO/issues)
+1. Check existing [Issues](https://github.com/franklesniak/PSConnMon/issues)
 2. Review the documentation in `.github/instructions/`
 3. Open a new issue with a clear description of the problem
 
