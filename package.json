@@ -1,16 +1,20 @@
 {
-  "name": "copilot-repo-template",
+  "name": "psconnmon",
   "version": "1.0.0",
-  "description": "Template repository with Copilot instructions and code quality tooling",
+  "description": "A lightweight, cross-platform PowerShell connectivity monitor that continuously tests ICMP, DNS, and SMB against target servers and logs results to CSV",
   "private": true,
   "scripts": {
     "lint:md": "markdownlint-cli2 \"**/*.md\" \"#node_modules\"",
     "lint:md:nested": "node .github/scripts/lint-nested-markdown.js"
   },
   "keywords": [
-    "template",
-    "copilot",
-    "linting"
+    "powershell",
+    "connectivity",
+    "monitoring",
+    "network",
+    "icmp",
+    "dns",
+    "smb"
   ],
   "author": "Frank Lesniak",
   "license": "MIT",

@@ -6,10 +6,7 @@ These instructions are authoritative for all changes in this repository.
 
 ## Source of Truth
 
-> **Customize this section** for your project. Point to your authoritative specification or design document. Example:
->
-> - Read **`docs/spec/requirements.md`** before making changes.
-> - If any instruction here conflicts with the spec, **the spec wins**.
+The `README.md` file describes the project's features, parameters, and behavior. When in doubt, the README is the authoritative reference for intended functionality.
 
 ## Non-negotiable Safety and Security Rules
 
