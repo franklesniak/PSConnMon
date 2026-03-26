@@ -5,13 +5,13 @@ description: "PowerShell coding standards"
 
 # PowerShell Writing Style
 
-**Version:** 1.5.20260210.0
+**Version:** 1.6.20260326.0
 
 ## Metadata
 
 - **Status:** Active
 - **Owner:** Repository Maintainers
-- **Last Updated:** 2026-02-10
+- **Last Updated:** 2026-03-26
 - **Scope:** Defines PowerShell coding standards for all `.ps1` files in this repository. Covers style, formatting, naming conventions, error handling, documentation requirements, and compatibility patterns for both legacy (v1.0) and modern (v5.1+/v7.x+) PowerShell codebases.
 
 ## Table of Contents
@@ -62,7 +62,7 @@ This checklist provides a quick reference for both human developers and LLMs (li
 
 - **[All]** Public identifiers (functions, parameters, properties) **MUST** use PascalCase → [Overview of Observed Naming Discipline](#overview-of-observed-naming-discipline)
 - **[All]** PowerShell keywords (function, param, if, else, return, trap) **MUST** be lowercase → [Overview of Observed Naming Discipline](#overview-of-observed-naming-discipline)
-- **[v1.0]** Local variables **MUST** use camelCase with type-hinting prefixes, fully descriptive (e.g., $strMessage, $intCount, no abbreviations) → [Local Variable Naming: Type-Prefixed camelCase](#local-variable-naming-type-prefixed-camelcase)
+- **[All]** Local variables **MUST** use camelCase with type-hinting prefixes, fully descriptive (e.g., $strMessage, $intCount, no abbreviations) → [Local Variable Naming: Type-Prefixed camelCase](#local-variable-naming-type-prefixed-camelcase)
 - **[All]** Functions **MUST** follow Verb-Noun pattern with approved verbs → [Script and Function Naming: Full Explicit Form](#script-and-function-naming-full-explicit-form)
 - **[All]** Functions **MUST** use singular nouns in function names → [Script and Function Naming: Nouns](#script-and-function-naming-nouns)
 - **[All]** Modules **MUST** use PascalCase nouns (containers, not actions) → [Module Naming: Noun-Based Containers](#module-naming-noun-based-containers)
@@ -78,6 +78,7 @@ This checklist provides a quick reference for both human developers and LLMs (li
 - **[All]** All functions **MUST** have full comment-based help → [Comment-Based Help: Structure and Format](#comment-based-help-structure-and-format)
 - **[All]** Comment-based help **MUST** be placed inside function body, above param block → [Comment-Based Help: Structure and Format](#comment-based-help-structure-and-format)
 - **[All]** Comment-based help **MUST** use single-line comments (#) with dotted keywords (.SYNOPSIS, .DESCRIPTION, etc.) → [Comment-Based Help: Structure and Format](#comment-based-help-structure-and-format)
+- **[v1.0]** Block comments (`<# ... #>`) **MUST NOT** be used — they cause parser errors in PowerShell v1.0; use single-line comments (`#`) instead → [Help Format Options: Comparison](#help-format-options-comparison)
 - **[All]** Comment-based help **MUST** include sections: .SYNOPSIS, .DESCRIPTION, .PARAMETER (one per parameter, if any), .EXAMPLE, .INPUTS, .OUTPUTS, .NOTES → [Comment-Based Help: Structure and Format](#comment-based-help-structure-and-format)
 - **[All]** Functions **SHOULD** provide multiple examples with input, output, and explanation → [Help Content Quality: High Standards](#help-content-quality-high-standards)
 - **[All]** All return codes **MUST** be documented with exact meanings in .OUTPUTS → [Help Content Quality: High Standards](#help-content-quality-high-standards)
@@ -145,6 +146,7 @@ This checklist provides a quick reference for both human developers and LLMs (li
 
 ### Language Interop and .NET
 
+- **[All]** `System.Collections.ArrayList` is deprecated and **MUST NOT** be used in new code; use `System.Collections.Generic.List[T]` instead → [.NET Interop Patterns: Safe and Documented](#net-interop-patterns-safe-and-documented)
 - **[All]** Generic collections **MUST** provide specific type T (List[PSCustomObject], not List[object]) → [.NET Interop Patterns: Safe and Documented](#net-interop-patterns-safe-and-documented)
 
 ### Testing
@@ -636,13 +638,13 @@ Local variables follow a **Hungarian-style notation** combining a **type-hinting
 - `$refLastKnownError`
 - `$versionPS`
 
-This prefixing is **not** a legacy artifact but a **deliberate design decision** to compensate for PowerShell’s dynamic typing and the absence of modern IDE tooling in v1.0 environments. The prefix:
+This prefixing is **not** a legacy artifact but a **deliberate design decision** to compensate for PowerShell’s dynamic typing and the frequent absence of modern IDE tooling. The prefix:
 
 - **Eliminates type inference errors** during debugging.
 - **Reduces cognitive load** when reading code without IntelliSense.
 - **Prevents accidental type mismatches** in complex logic flows.
 
-While some modern styles discourage such prefixes, in this context they represent **defensive programming**—a hallmark of the author’s v1.0-focused robustness philosophy.
+While some modern styles discourage such prefixes, in this context they represent **defensive programming**—a hallmark of the author’s robustness philosophy that applies to all scripts regardless of target PowerShell version.
 
 ### Path and Scope Handling
 
@@ -666,14 +668,14 @@ This eliminates environment-dependent behavior and ensures deterministic executi
 
 ### Options for Local Variable Prefixes: Analysis
 
-The use of type prefixes on local variables represents a **stylistic fork** with no community-mandated "correct" answer. The guides explicitly state this is a **"matter of taste"** for private variables. Below is an analysis of the two viable paths:
+The broader PowerShell community considers the use of type prefixes on local variables a **"matter of taste"** for private variables. Some style guides recommend plain camelCase (e.g., `$message`, `$count`) as a cleaner, more modern approach that aligns with .NET naming conventions. Below is a comparison of the two approaches for context:
 
 | Option | Description | Pros | Cons |
 | --- | --- | --- | --- |
-| **1. Keep Type Prefixes** (e.g., `$strMessage`, `$intCount`) | Retain current Hungarian-style notation | • Immediate type visibility in plain text • Critical in v1.0 without IDE support • Reduces runtime type errors • Self-documenting in large functions | • Increases visual noise • Feels dated in modern editors • **Intentionally longer variable names** (as abbreviations are forbidden) |
-| **2. Use Plain camelCase** (e.g., `$message`, `$count`) | Remove prefixes, rely on context/tools | • Cleaner, more modern aesthetic • Aligns with .NET naming simplicity • Shorter, easier to type | • Requires IDE/IntelliSense for type clarity • Risk of confusion in complex logic • Less resilient in plain-text review |
+| **1. Type Prefixes** (e.g., `$strMessage`, `$intCount`) | Hungarian-style notation **(required by this style guide)** | • Immediate type visibility in plain text • Critical in v1.0 without IDE support • Reduces runtime type errors • Self-documenting in large functions | • Increases visual noise • Feels dated in modern editors • **Intentionally longer variable names** (as abbreviations are forbidden) |
+| **2. Plain camelCase** (e.g., `$message`, `$count`) | Community alternative **(not permitted in this codebase)** | • Cleaner, more modern aesthetic • Aligns with .NET naming simplicity • Shorter, easier to type | • Requires IDE/IntelliSense for type clarity • Risk of confusion in complex logic • Less resilient in plain-text review |
 
-**Recommendation**: **Retain prefixes in v1.0-targeted code**. The clarity benefit outweighs verbosity when IDE support cannot be assumed. In v2.0+ codebases with consistent tooling, transition to plain camelCase is acceptable.
+**This style guide requires type prefixes (Option 1) in all code.** Plain camelCase is a valid community alternative, but it is **not permitted** in this codebase. The clarity benefit of type prefixes outweighs verbosity regardless of target PowerShell version, as IDE support cannot always be assumed and the prefixes provide immediate type context in any environment.
 
 ### Summary: Naming as Defensive Architecture
 
@@ -681,7 +683,7 @@ The author’s naming conventions are not merely stylistic—they form a **defen
 
 1. **Eliminates ambiguity** through full explicit names.
 2. **Future-proofs** against command evolution.
-3. **Compensates for v1.0 limitations** via type prefixes.
+3. **Provides immediate type context** via type prefixes.
 4. **Ensures deterministic behavior** through explicit scoping.
 
 This results in code that is **self-documenting**, **resilient to change**, and **immediately comprehensible** to any PowerShell practitioner—regardless of their familiarity with the specific script.
@@ -899,10 +901,36 @@ The author uses **single-line comments** (`# .SECTION`) rather than **block comm
 
 | Format | Pros | Cons |
 | --- | --- | --- |
-| **Single-line (`#`)** | • Granular editing • Clear in diff tools • No escaping issues | • More vertical space • Slightly more typing |
-| **Block (`<# #>`)** | • Compact • Modern aesthetic | • Harder to edit individual lines • Risk of malformed blocks |
+| **Single-line (`#`)** | • Granular editing • Clear in diff tools • No escaping issues • Works in **all** PowerShell versions including v1.0 | • More vertical space • Slightly more typing |
+| **Block (`<# ... #>`)** | • Compact • Modern aesthetic | • **Not supported in PowerShell v1.0** (causes parser error) • Harder to edit individual lines • Risk of malformed blocks |
 
-**Finding**: Both are **equally valid** and **discoverable by `Get-Help`** in PowerShell v1.0+. The author’s choice of single-line format is **defensible and consistent** with the v1.0 compatibility goal.
+> **⚠ PowerShell v1.0 Compatibility Warning:** Block comments (`<# ... #>`) were introduced in PowerShell v2.0. In PowerShell v1.0, attempting to use block comments results in a **parser error** that prevents the script from running. Scripts targeting v1.0 compatibility **MUST** use only single-line comments (`#`). This applies to both comment-based help and general-purpose comments.
+
+**Finding**: Only **single-line comments** (`#`) are compatible with PowerShell v1.0. Block comments (`<# ... #>`) are valid in PowerShell v2.0+ and are discoverable by `Get-Help` in those versions, but they **MUST NOT** be used when v1.0 compatibility is required. The author’s choice of single-line format is **required** for the v1.0 compatibility goal.
+
+**Example — what fails in PowerShell v1.0:**
+
+```powershell
+# This will cause a parser error in PowerShell v1.0:
+function Get-Example {
+    <#
+    .SYNOPSIS
+        Example function.
+    #>
+    param ()
+}
+```
+
+**Correct approach for v1.0 compatibility:**
+
+```powershell
+# This works in all PowerShell versions, including v1.0:
+function Get-Example {
+    # .SYNOPSIS
+    #     Example function.
+    param ()
+}
+```
 
 ---
 
@@ -1983,6 +2011,20 @@ The author uses **direct .NET interop** in controlled scenarios:
 $strSplitterInRegEx = [regex]::Escape($Splitter)
 $result = [regex]::Split($StringToSplit, $strSplitterInRegEx)
 ```
+
+**Deprecation of `System.Collections.ArrayList`:** `System.Collections.ArrayList` is **deprecated** (consistent with [Microsoft's .NET guidance](https://learn.microsoft.com/en-us/dotnet/api/system.collections.arraylist)) and **MUST NOT** be used in new code. All new and newly-modified code **MUST** use `System.Collections.Generic.List[T]` instead. `System.Collections.Generic.List[T]` has been available since .NET Framework 2.0 (PowerShell v1.0).
+
+`ArrayList` is only permitted as a fallback in rare, well-justified cases where an attempt to instantiate `System.Collections.Generic.List[T]` throws an exception that is caught and handled. Such fallback **MUST** be reported via the debug stream, and the debug message **MUST** include the caught exception type and message (for example: `Write-Debug "Failed to create generic list; falling back to ArrayList. Exception: $($_.Exception.GetType().FullName): $($_.Exception.Message)"`).
+
+```powershell
+# Compliant (Required for all new code)
+$list = New-Object System.Collections.Generic.List[PSCustomObject]
+
+# Non-Compliant (Deprecated — do not use in new code)
+$list = New-Object System.Collections.ArrayList
+```
+
+> **Migration Note:** Legacy code that uses `System.Collections.ArrayList` **SHOULD** be refactored to use `System.Collections.Generic.List[T]` with the appropriate type parameter when the code is next modified. Replace `New-Object System.Collections.ArrayList` with `New-Object System.Collections.Generic.List[PSCustomObject]` (or the appropriate type), and verify that all `.Add()` calls and downstream consumers are compatible with the typed list.
 
 **Typed Generic Collections:** When instantiating generic .NET collections, such as `System.Collections.Generic.List[T]`, the specific type `T` **MUST** be provided if known (e.g., `[PSCustomObject]`, `[string]`). This is more precise, safer, and more descriptive than using the generic `[object]`.
 
