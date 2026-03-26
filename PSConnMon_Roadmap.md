@@ -1,15 +1,21 @@
 
 # PSConnMon – Development Roadmap & Conference Readiness
 
+- **Status:** Active
+- **Owner:** Repository Maintainers
+- **Last Updated:** 2026-03-26
+- **Scope:** Tracks planned improvements, architectural questions, and feature additions for PSConnMon. Does not cover current functionality or release notes.
+- **Related:** [README](README.md)
+
 This document tracks planned improvements, architectural questions, and feature additions required before presenting **PSConnMon** at a conference.
 
 The goal is to improve reliability, expand platform support, and introduce centralized telemetry and visualization.
 
 ---
 
-# Core Improvements
+## Core Improvements
 
-## PSScriptAnalyzer / Improvement Factory
+### PSScriptAnalyzer / Improvement Factory
 
 - [ ] Update documentation to consistently reference the correct tool name.
 - [ ] Run **PSScriptAnalyzer** across the project.
@@ -18,7 +24,7 @@ The goal is to improve reliability, expand platform support, and introduce centr
 
 ---
 
-## Exit Logic Improvements
+### Exit Logic Improvements
 
 Current behavior may prevent execution if an initial check fails.
 
@@ -31,7 +37,7 @@ Planned improvements:
 
 ---
 
-## Default Target Behavior
+### Default Target Behavior
 
 The default behavior should support running against **multiple servers**.
 
@@ -43,7 +49,7 @@ Tasks:
 
 ---
 
-## Parameter Consolidation
+### Parameter Consolidation
 
 Some logic currently differs between connection tests.
 
@@ -55,7 +61,7 @@ Tasks:
 
 ---
 
-## ThreadJob Installation Fix
+### ThreadJob Installation Fix
 
 Update the recommended installation command for the required module.
 
@@ -71,9 +77,9 @@ Reason:
 
 ---
 
-# Input Model Improvements
+## Input Model Improvements
 
-## JSON-Based Input
+### JSON-Based Input
 
 Allow PSConnMon to accept **structured configuration input**.
 
@@ -102,7 +108,7 @@ Example concept:
 
 ---
 
-## Command and Control Model
+### Command and Control Model
 
 Consider a **centralized configuration approach**.
 
@@ -125,7 +131,7 @@ Possible authentication approaches:
 
 ---
 
-# Logging and Telemetry
+## Logging and Telemetry
 
 PSConnMon should support both **local logging and centralized telemetry**.
 
@@ -143,7 +149,7 @@ Considerations:
 
 ---
 
-# Multi-Platform Support
+## Multi-Platform Support
 
 PSConnMon should support **Windows and Linux environments**.
 
@@ -157,7 +163,7 @@ Tasks:
 
 ---
 
-# Authentication Testing
+## Authentication Testing
 
 The original design goal was to test **Windows authentication** under the user's security context.
 
@@ -172,16 +178,16 @@ Open questions:
 
 ---
 
-# Network Quality Features
+## Network Quality Features
 
 Future enhancements for deeper network diagnostics.
 
-## Internet Quality Monitoring
+### Internet Quality Monitoring
 
 - [ ] Implement **internet quality testing**.
 - [ ] Track **latency over time**.
 
-## Traceroute Hop Tracking
+### Traceroute Hop Tracking
 
 Implement traceroute-based path diagnostics.
 
@@ -197,7 +203,7 @@ Provide functionality similar to **PingPlotter-style monitoring**.
 
 ---
 
-# Extensibility
+## Extensibility
 
 PSConnMon should support **custom testing logic**.
 
@@ -216,7 +222,7 @@ Invoke-PSConnMon -CustomTest {
 
 ---
 
-# Visualization & Reporting
+## Visualization & Reporting
 
 Results should be easily consumable and visualized.
 
@@ -239,7 +245,7 @@ Tasks:
 
 ---
 
-# Open Architecture Questions
+## Open Architecture Questions
 
 These topics require further investigation.
 
@@ -251,7 +257,7 @@ These topics require further investigation.
 
 ---
 
-# Long-Term Vision
+## Long-Term Vision
 
 The long-term goal of **PSConnMon** is to provide:
 
