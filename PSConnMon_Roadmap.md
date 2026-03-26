@@ -1,6 +1,12 @@
 
 # PSConnMon – Development Roadmap & Conference Readiness
 
+- **Status:** Active
+- **Owner:** Repository Maintainers
+- **Last Updated:** 2026-03-26
+- **Scope:** Tracks planned improvements, architectural questions, and feature additions for PSConnMon. Does not cover current functionality or release notes.
+- **Related:** [README](README.md)
+
 This document tracks planned improvements, architectural questions, and feature additions required before presenting **PSConnMon** at a conference.
 
 The goal is to improve reliability, expand platform support, and introduce centralized telemetry and visualization.
