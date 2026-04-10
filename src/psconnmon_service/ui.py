@@ -64,11 +64,11 @@ def render_dashboard(
 
     incident_rows = "\n".join(
         (
-            "<article class=\"incident\">"
+            '<article class="incident">'
             f"<h3>{html.escape(incident.fqdn)} · {html.escape(incident.test_type)}</h3>"
-            f"<p class=\"status\">{html.escape(incident.result)}</p>"
+            f'<p class="status">{html.escape(incident.result)}</p>'
             f"<p>{html.escape(incident.details)}</p>"
-            f"<p class=\"meta\">{html.escape(_format_timestamp(incident.timestamp_utc))}</p>"
+            f'<p class="meta">{html.escape(_format_timestamp(incident.timestamp_utc))}</p>'
             "</article>"
         )
         for incident in incidents[:8]

@@ -31,8 +31,7 @@ class StorageRepository:
 
     def _initialize(self) -> None:
         with self._connect() as connection:
-            connection.execute(
-                """
+            connection.execute("""
                 CREATE TABLE IF NOT EXISTS events (
                     timestamp_utc TIMESTAMP,
                     agent_id TEXT,
@@ -55,10 +54,8 @@ class StorageRepository:
                     path_hash TEXT,
                     metadata JSON
                 )
-                """
-            )
-            connection.execute(
-                """
+                """)
+            connection.execute("""
                 CREATE TABLE IF NOT EXISTS import_ledger (
                     source_type TEXT,
                     source_identifier TEXT,
@@ -67,10 +64,8 @@ class StorageRepository:
                     event_count INTEGER,
                     PRIMARY KEY (source_type, source_identifier, fingerprint)
                 )
-                """
-            )
-            connection.execute(
-                """
+                """)
+            connection.execute("""
                 CREATE TABLE IF NOT EXISTS import_source_status (
                     source_type TEXT PRIMARY KEY,
                     last_run_utc TIMESTAMP,
@@ -88,8 +83,7 @@ class StorageRepository:
                     cumulative_skipped BIGINT NOT NULL DEFAULT 0,
                     cumulative_failed BIGINT NOT NULL DEFAULT 0
                 )
-                """
-            )
+                """)
 
     def ingest_events(self, events: list[EventRecord]) -> int:
         """Insert validated events into storage."""
@@ -137,7 +131,9 @@ class StorageRepository:
 
         return len(rows)
 
-    def has_import_fingerprint(self, *, source_type: str, source_identifier: str, fingerprint: str) -> bool:
+    def has_import_fingerprint(
+        self, *, source_type: str, source_identifier: str, fingerprint: str
+    ) -> bool:
         """Return True when the batch has already been imported."""
 
         with self._connect() as connection:
@@ -274,8 +270,7 @@ class StorageRepository:
         """Return aggregate import status across all configured sources."""
 
         with self._connect() as connection:
-            rows = connection.execute(
-                """
+            rows = connection.execute("""
                 SELECT
                     source_type,
                     last_run_utc,
@@ -294,10 +289,11 @@ class StorageRepository:
                     cumulative_failed
                 FROM import_source_status
                 ORDER BY source_type
-                """
-            ).fetchall()
+                """).fetchall()
 
-        sources = [status for status in (self._row_to_import_source_status(row) for row in rows) if status]
+        sources = [
+            status for status in (self._row_to_import_source_status(row) for row in rows) if status
+        ]
         latest_error_source = max(
             (source for source in sources if source.last_error and source.last_run_utc is not None),
             default=None,
@@ -306,7 +302,9 @@ class StorageRepository:
 
         return ImportStatus(
             mode=mode,
-            last_run_utc=max((source.last_run_utc for source in sources if source.last_run_utc), default=None),
+            last_run_utc=max(
+                (source.last_run_utc for source in sources if source.last_run_utc), default=None
+            ),
             last_success_utc=max(
                 (source.last_success_utc for source in sources if source.last_success_utc),
                 default=None,
@@ -323,8 +321,7 @@ class StorageRepository:
         """Return a one-row aggregated fleet summary."""
 
         with self._connect() as connection:
-            row = connection.execute(
-                """
+            row = connection.execute("""
                 SELECT
                     COUNT(*) AS total_events,
                     COUNT(DISTINCT target_id) AS total_targets,
@@ -333,8 +330,7 @@ class StorageRepository:
                     SUM(CASE WHEN result = 'TIMEOUT' THEN 1 ELSE 0 END) AS timeout_events,
                     MAX(timestamp_utc) AS latest_timestamp_utc
                 FROM events
-                """
-            ).fetchone()
+                """).fetchone()
 
         return FleetSummary(
             total_events=int(row[0] or 0),
@@ -474,7 +470,9 @@ class StorageRepository:
             event.model_dump_json(include={"metadata"}),
         )
 
-    def _row_to_import_source_status(self, row: tuple[object, ...] | None) -> ImportSourceStatus | None:
+    def _row_to_import_source_status(
+        self, row: tuple[object, ...] | None
+    ) -> ImportSourceStatus | None:
         """Convert a raw DuckDB row into an import source status model."""
 
         if row is None:

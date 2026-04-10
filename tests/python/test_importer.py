@@ -71,7 +71,9 @@ def test_import_manager_records_invalid_jsonl_failures(tmp_path: Path) -> None:
     assert "Invalid JSON" in (status.last_error or "")
 
 
-def test_import_manager_supports_hybrid_mode_with_fake_azure_source(tmp_path: Path, monkeypatch) -> None:
+def test_import_manager_supports_hybrid_mode_with_fake_azure_source(
+    tmp_path: Path, monkeypatch
+) -> None:
     """Hybrid mode should ingest local and Azure batches without duplicate conflicts."""
 
     local_line = (

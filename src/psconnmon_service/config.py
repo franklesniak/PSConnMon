@@ -6,7 +6,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-
 VALID_IMPORT_MODES = {"disabled", "local", "azure", "hybrid"}
 VALID_AZURE_AUTH_MODES = {"managedIdentity", "sasToken"}
 
@@ -48,9 +47,7 @@ class ServiceSettings:
         try:
             import_interval_seconds = int(interval_text)
         except ValueError as error:
-            raise ValueError(
-                "PSCONNMON_IMPORT_INTERVAL_SECONDS must be an integer."
-            ) from error
+            raise ValueError("PSCONNMON_IMPORT_INTERVAL_SECONDS must be an integer.") from error
 
         if import_interval_seconds < 1:
             raise ValueError("PSCONNMON_IMPORT_INTERVAL_SECONDS must be greater than 0.")

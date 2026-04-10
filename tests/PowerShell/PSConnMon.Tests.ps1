@@ -124,7 +124,7 @@ Describe 'Test-PSConnMonConfig' {
         { Test-PSConnMonConfig -Config $config -PassThru } | Should -Throw
     }
 
-    It 'Loads YAML configuration files when YAML support is available' {
+    It 'Loads YAML configuration files when YAML support is available' -Skip:(-not ((Get-Command -Name ConvertFrom-Yaml -ErrorAction SilentlyContinue) -or (Get-Module -ListAvailable -Name powershell-yaml))) {
         $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
         $configPath = Join-Path -Path $tempRoot -ChildPath 'config.yaml'
         [void](New-Item -Path $tempRoot -ItemType Directory -Force)
@@ -269,7 +269,7 @@ Describe 'Write-PSConnMonEvent' {
     It 'Writes JSONL batches' {
         $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
         $batchPath = Join-Path -Path $tempRoot -ChildPath 'pending/cycle.jsonl'
-        $event = [pscustomobject]@{
+        $connMonEvent = [pscustomobject]@{
             timestampUtc = '2026-04-09T00:00:00Z'
             agentId = 'agent-01'
             siteId = 'site-01'
@@ -292,7 +292,7 @@ Describe 'Write-PSConnMonEvent' {
             metadata = @{}
         }
 
-        $writtenPath = Write-PSConnMonEvent -Event $event -BatchPath $batchPath
+        $writtenPath = Write-PSConnMonEvent -Event $connMonEvent -BatchPath $batchPath
         $writtenPath | Should -Be $batchPath
         (Test-Path -Path $batchPath) | Should -BeTrue
         (Get-Content -Path $batchPath -Raw) | Should -Match '"result":"SUCCESS"'
