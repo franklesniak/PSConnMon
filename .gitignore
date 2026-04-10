@@ -24,6 +24,7 @@ htmlcov/
 
 # Runtime data
 data/
+config/*.private.psconnmon.yaml
 
 # OS files
 .DS_Store

@@ -15,6 +15,18 @@ def _format_timestamp(value: datetime | None) -> str:
     return value.isoformat()
 
 
+def _format_number(value: object | None) -> str:
+    """Format numeric values defensively for dashboard rendering."""
+
+    if value is None:
+        return ""
+
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return html.escape(str(value))
+
+
 def render_dashboard(
     summary: FleetSummary,
     targets: list[TargetSummary],
@@ -30,7 +42,7 @@ def render_dashboard(
             f"<td>{html.escape(target.fqdn)}</td>"
             f"<td>{html.escape(target.site_id)}</td>"
             f"<td>{html.escape(target.latest_result)}</td>"
-            f"<td>{'' if target.last_latency_ms is None else target.last_latency_ms:.2f}</td>"
+            f"<td>{_format_number(target.last_latency_ms)}</td>"
             f"<td>{html.escape(_format_timestamp(target.last_timestamp_utc))}</td>"
             "</tr>"
         )
@@ -43,7 +55,7 @@ def render_dashboard(
             f"<td>{html.escape(path.fqdn)}</td>"
             f"<td>{html.escape(path.path_hash)}</td>"
             f"<td>{path.hop_count}</td>"
-            f"<td>{'' if path.average_hop_latency_ms is None else path.average_hop_latency_ms:.2f}</td>"
+            f"<td>{_format_number(path.average_hop_latency_ms)}</td>"
             f"<td>{html.escape(_format_timestamp(path.last_seen_utc))}</td>"
             "</tr>"
         )
