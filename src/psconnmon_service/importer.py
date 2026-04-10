@@ -90,7 +90,9 @@ class AzureBlobBatchSource:
         """Return discoverable Azure blob batches from the configured prefix."""
 
         blob_service_client = self._create_blob_service_client()
-        container_client = blob_service_client.get_container_client(self.settings.azure_storage_container)
+        container_client = blob_service_client.get_container_client(
+            self.settings.azure_storage_container
+        )
         prefix = self.settings.azure_blob_prefix.strip("/")
         list_prefix = "" if prefix == "" else f"{prefix}/"
 
@@ -140,7 +142,9 @@ class AzureBlobBatchSource:
             return BlobServiceClient(account_url=account_url, credential=credential)
 
         if self.settings.azure_sas_token.strip() == "":
-            raise ValueError("PSCONNMON_AZURE_SAS_TOKEN is required when Azure auth mode is sasToken.")
+            raise ValueError(
+                "PSCONNMON_AZURE_SAS_TOKEN is required when Azure auth mode is sasToken."
+            )
 
         sas_token = self.settings.azure_sas_token.strip().lstrip("?")
         separator = "&" if "?" in account_url else "?"
@@ -194,7 +198,10 @@ class ImportManager:
         if self.settings.import_mode == "azure":
             return [AzureBlobBatchSource(self.settings)]
 
-        return [LocalBatchSource(self.settings.import_local_path), AzureBlobBatchSource(self.settings)]
+        return [
+            LocalBatchSource(self.settings.import_local_path),
+            AzureBlobBatchSource(self.settings),
+        ]
 
     def _import_source(self, source: BatchSource) -> None:
         """Import all discoverable batches for one source and persist status."""

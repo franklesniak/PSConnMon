@@ -50,4 +50,3 @@ def test_event_record_rejects_invalid_result() -> None:
 
     with pytest.raises(ValueError, match="Unsupported result"):
         EventRecord.model_validate(payload)
-
