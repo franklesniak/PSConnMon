@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://psconnmon.local/schemas/psconnmon-config.schema.json",
+  "title": "PSConnMon Config v1",
+  "type": "object",
+  "required": ["schemaVersion", "agent", "publish", "tests", "auth", "targets", "extensions"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "agent": {
+      "type": "object",
+      "required": ["agentId", "siteId", "spoolDirectory", "batchSize", "publishIntervalSeconds", "configPollIntervalSeconds", "cycleIntervalSeconds", "maxRuntimeMinutes", "cleanupAfterDays"]
+    },
+    "publish": {
+      "type": "object",
+      "required": ["mode", "format", "csvMirror", "azure"]
+    },
+    "tests": {
+      "type": "object",
+      "required": ["enabled", "pingTimeoutMs", "pingPacketSize", "shareAccessTimeoutSeconds", "tracerouteTimeoutSeconds", "internetQualitySampleCount"]
+    },
+    "auth": {
+      "type": "object",
+      "required": ["linuxSmbMode", "secretReference"]
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "fqdn", "address", "roles", "tags", "dnsServers", "shares", "tests", "externalTraceTarget"]
+      }
+    },
+    "extensions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "entryPoint": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

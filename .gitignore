@@ -22,6 +22,9 @@ htmlcov/
 # Pre-commit
 .pre-commit-cache/
 
+# Runtime data
+data/
+
 # OS files
 .DS_Store
 Thumbs.db

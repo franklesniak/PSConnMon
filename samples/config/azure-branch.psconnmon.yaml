@@ -1,0 +1,76 @@
+schemaVersion: '1.0'
+agent:
+  agentId: branch-01
+  siteId: plant-a
+  spoolDirectory: data/spool
+  batchSize: 250
+  publishIntervalSeconds: 30
+  configPollIntervalSeconds: 60
+  cycleIntervalSeconds: 30
+  maxRuntimeMinutes: 0
+  cleanupAfterDays: 7
+publish:
+  mode: azure
+  format: jsonl
+  csvMirror: false
+  azure:
+    enabled: true
+    accountName: psconnmonstorage
+    containerName: telemetry
+    blobPrefix: events/plant-a
+    configBlobPath: configs/branch-01.yaml
+    authMode: managedIdentity
+    sasToken: ''
+tests:
+  enabled:
+    - ping
+    - dns
+    - share
+    - internetQuality
+    - traceroute
+  pingTimeoutMs: 3000
+  pingPacketSize: 56
+  shareAccessTimeoutSeconds: 15
+  tracerouteTimeoutSeconds: 20
+  internetQualitySampleCount: 5
+auth:
+  linuxSmbMode: currentContext
+  secretReference: ''
+targets:
+  - id: fs01
+    fqdn: fs01.corp.local
+    address: 10.10.20.15
+    roles:
+      - fileserver
+    tags:
+      - primary
+      - plant-a
+    dnsServers:
+      - 10.10.0.10
+    shares:
+      - id: plant
+        path: '\\fs01.corp.local\Plant'
+    tests:
+      - ping
+      - dns
+      - share
+      - internetQuality
+      - traceroute
+    externalTraceTarget: 8.8.8.8
+  - id: dc01
+    fqdn: dc01.corp.local
+    address: 10.10.0.10
+    roles:
+      - domain-controller
+    tags:
+      - authentication
+    dnsServers:
+      - 10.10.0.10
+    shares: []
+    tests:
+      - ping
+      - dns
+      - internetQuality
+      - traceroute
+    externalTraceTarget: 1.1.1.1
+extensions: []

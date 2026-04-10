@@ -1,0 +1,22 @@
+services:
+  reporting:
+    build:
+      context: .
+    image: psconnmon-service:local
+    environment:
+      PSCONNMON_DB_PATH: /data/psconnmon.duckdb
+      PSCONNMON_IMPORT_MODE: local
+      PSCONNMON_IMPORT_INTERVAL_SECONDS: 30
+      PSCONNMON_IMPORT_LOCAL_PATH: /data/import
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.31.0
+    command: azurite --blobHost 0.0.0.0 --location /data
+    ports:
+      - "10000:10000"
+    volumes:
+      - ./data/azurite:/data
