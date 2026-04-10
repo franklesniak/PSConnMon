@@ -124,7 +124,7 @@ Describe 'Test-PSConnMonConfig' {
         { Test-PSConnMonConfig -Config $config -PassThru } | Should -Throw
     }
 
-    It 'Loads YAML configuration files when YAML support is available' -Skip:(-not (Get-Command -Name ConvertFrom-Yaml -ErrorAction SilentlyContinue) -and -not (Get-Module -ListAvailable -Name powershell-yaml)) {
+    It 'Loads YAML configuration files when YAML support is available' -Skip:(-not ((Get-Command -Name ConvertFrom-Yaml -ErrorAction SilentlyContinue) -or (Get-Module -ListAvailable -Name powershell-yaml))) {
         $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
         $configPath = Join-Path -Path $tempRoot -ChildPath 'config.yaml'
         [void](New-Item -Path $tempRoot -ItemType Directory -Force)
