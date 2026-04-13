@@ -1006,6 +1006,40 @@ Describe 'Linux share and domain auth probes' {
     }
 }
 
+Describe 'Traceroute probe handling' {
+    It 'Returns NoPathData instead of a fatal error when traceroute output is blank' {
+        $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
+        [void](New-Item -Path $tempRoot -ItemType Directory -Force)
+        $config = New-PSConnMonTestConfig -TempRoot $tempRoot -EnabledTests @('traceroute')
+        $config.targets[0].externalTraceTarget = '8.8.8.8'
+
+        InModuleScope PSConnMon -Parameters @{ ConfigValue = $config } {
+            param($ConfigValue)
+            $originalIsWindows = $script:PSConnMonIsWindows
+            try {
+                $script:PSConnMonIsWindows = $true
+
+                Mock -ModuleName PSConnMon Assert-PSConnMonDependency {}
+                Mock -ModuleName PSConnMon Start-ThreadJob {
+                    return (Start-Job -ScriptBlock { return $null })
+                }
+                Mock -ModuleName PSConnMon Wait-Job { $true }
+                Mock -ModuleName PSConnMon Receive-Job { '' }
+                Mock -ModuleName PSConnMon Stop-Job {}
+                Mock -ModuleName PSConnMon Remove-Job {}
+
+                $events = @(Test-PSConnMonTraceroute -Target $ConfigValue.targets[0] -Config $ConfigValue)
+
+                $events.Count | Should -Be 1
+                $events[0].result | Should -Be 'FAILURE'
+                $events[0].errorCode | Should -Be 'NoPathData'
+            } finally {
+                $script:PSConnMonIsWindows = $originalIsWindows
+            }
+        }
+    }
+}
+
 Describe 'Watch-Network.ps1' {
     It 'Accepts direct target-object input' {
         $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))

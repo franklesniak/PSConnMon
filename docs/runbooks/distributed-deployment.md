@@ -337,6 +337,13 @@ extensions: []
 The Windows endpoint is still useful for parallel Windows-native UNC checks, but
 it is no longer the only supported way to cover authenticated SMB targets.
 
+The Windows share probe uses the current Windows security context for UNC
+access. PSConnMon does not currently support a separate Windows per-share
+username/password credential profile. If a non-domain or alternate-credential
+share requires explicit SMB credentials, validate it from the Linux collector
+with `auth.linuxProfiles[]`, or pre-provision Windows access for the scheduled
+task identity outside PSConnMon.
+
 If you stay on Windows PowerShell 5.1, prefer JSON for the config file. If you
 run PowerShell 7 with YAML support, the YAML form below is also valid. When you
 switch to JSON, keep the local filename and `publish.azure.configBlobPath`

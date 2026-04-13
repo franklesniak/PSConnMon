@@ -2664,8 +2664,19 @@ function Test-PSConnMonTraceroute {
             )
         }
 
-        $outputLines = @(Receive-Job -Job $jobValue -Wait -ErrorAction Stop | ForEach-Object { $_.ToString() })
-        $parsedEvents = @(Get-PSConnMonTracerouteHopEvent -OutputLines $outputLines -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -Target $Target -TargetAddress $traceTarget)
+        $outputLines = [string[]]@(
+            Receive-Job -Job $jobValue -Wait -ErrorAction Stop |
+                ForEach-Object {
+                    if ($null -ne $_) {
+                        $_.ToString()
+                    }
+                } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        )
+        $parsedEvents = @()
+        if ($outputLines.Count -gt 0) {
+            $parsedEvents = @(Get-PSConnMonTracerouteHopEvent -OutputLines $outputLines -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -Target $Target -TargetAddress $traceTarget)
+        }
         if ($parsedEvents.Count -gt 0) {
             return $parsedEvents
         }
