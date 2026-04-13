@@ -1410,7 +1410,7 @@ function Get-PSConnMonTracerouteHopEvent {
     #
     # .DESCRIPTION
     # Reads platform-specific traceroute output and emits canonical hop events
-    # with a deterministic path fingerprint.
+    # plus one summary event with a deterministic path fingerprint.
     #
     # .PARAMETER OutputLines
     # The raw traceroute output lines.
@@ -1471,7 +1471,14 @@ function Get-PSConnMonTracerouteHopEvent {
             }
 
             if ($trimmedLine -match '^\d+\s+([A-Za-z0-9\.\-]+)\s+\(?(\d{1,3}(\.\d{1,3}){3})?\)?') {
-                $hopName = $Matches[1]
+                $candidateHopName = $Matches[1]
+                if (
+                    (-not [string]::IsNullOrWhiteSpace($candidateHopName)) -and
+                    ($candidateHopName -ne $hopAddress) -and
+                    ($candidateHopName -notmatch '^\d+(\.\d+)?$')
+                ) {
+                    $hopName = $candidateHopName
+                }
             }
 
             $hopValues.Add(('{0}:{1}' -f $hopIndex, $hopAddress))
@@ -1499,6 +1506,19 @@ function Get-PSConnMonTracerouteHopEvent {
 
     foreach ($eventValue in $eventValues) {
         $eventValue.pathHash = if ([string]::IsNullOrWhiteSpace($pathHash)) { $null } else { $pathHash }
+    }
+
+    if ($hopValues.Count -gt 0) {
+        $eventValues.Add(
+            (Get-PSConnMonEventRecord -AgentId $AgentId -SiteId $SiteId -TargetId $Target.id `
+                -Fqdn $Target.fqdn -TargetAddress $TargetAddress -TestType 'traceroute' `
+                -ProbeName 'Traceroute.Summary' -Result 'SUCCESS' `
+                -Details ('Traceroute completed with {0} hops.' -f $hopValues.Count) `
+                -PathHash $pathHash -Metadata @{
+                    role = 'summary'
+                    hopCount = $hopValues.Count
+                })
+        ) | Out-Null
     }
 
     return $eventValues.ToArray()

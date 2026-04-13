@@ -365,6 +365,7 @@ class StorageRepository:
                     timestamp_utc,
                     ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp_utc DESC) AS row_number
                 FROM events
+                WHERE result <> 'INFO'
             )
             SELECT target_id, agent_id, fqdn, site_id, target_address, test_type, result, latency_ms, timestamp_utc
             FROM ranked
@@ -407,6 +408,7 @@ class StorageRepository:
                         ORDER BY timestamp_utc DESC
                     ) AS row_number
                 FROM events
+                WHERE result <> 'INFO'
             )
             SELECT
                 agent_id,
@@ -457,6 +459,7 @@ class StorageRepository:
                         ORDER BY timestamp_utc DESC
                     ) AS row_number
                 FROM events
+                WHERE result <> 'INFO'
             )
             SELECT
                 site_id,

@@ -1007,6 +1007,52 @@ Describe 'Linux share and domain auth probes' {
 }
 
 Describe 'Traceroute probe handling' {
+    It 'Emits hop events plus a success summary event for parsed traceroute output' {
+        $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
+        [void](New-Item -Path $tempRoot -ItemType Directory -Force)
+        $config = New-PSConnMonTestConfig -TempRoot $tempRoot -EnabledTests @('traceroute')
+        $config.targets[0].id = 'edge-01'
+        $config.targets[0].fqdn = 'edge-01.corp.local'
+        $config.targets[0].externalTraceTarget = '8.8.8.8'
+
+        InModuleScope PSConnMon -Parameters @{ ConfigValue = $config } {
+            param($ConfigValue)
+            $originalIsWindows = $script:PSConnMonIsWindows
+            try {
+                $script:PSConnMonIsWindows = $true
+
+                Mock -ModuleName PSConnMon Assert-PSConnMonDependency {}
+                Mock -ModuleName PSConnMon Start-ThreadJob {
+                    return (Start-Job -ScriptBlock { return $null })
+                }
+                Mock -ModuleName PSConnMon Wait-Job { $true }
+                Mock -ModuleName PSConnMon Receive-Job {
+                    @(
+                        '1     1 ms     1 ms     1 ms  10.0.100.1',
+                        '2    18 ms    12 ms    20 ms  100.93.238.194'
+                    )
+                }
+                Mock -ModuleName PSConnMon Stop-Job {}
+                Mock -ModuleName PSConnMon Remove-Job {}
+
+                $events = @(Test-PSConnMonTraceroute -Target $ConfigValue.targets[0] -Config $ConfigValue)
+
+                $events.Count | Should -Be 3
+                $events[0].result | Should -Be 'INFO'
+                $events[0].hopIndex | Should -Be 1
+                $events[0].hopAddress | Should -Be '10.0.100.1'
+                $events[0].hopName | Should -BeNullOrEmpty
+                $events[2].probeName | Should -Be 'Traceroute.Summary'
+                $events[2].result | Should -Be 'SUCCESS'
+                $events[2].metadata.role | Should -Be 'summary'
+                $events[2].metadata.hopCount | Should -Be 2
+                $events[2].pathHash | Should -Not -BeNullOrEmpty
+            } finally {
+                $script:PSConnMonIsWindows = $originalIsWindows
+            }
+        }
+    }
+
     It 'Returns NoPathData instead of a fatal error when traceroute output is blank' {
         $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
         [void](New-Item -Path $tempRoot -ItemType Directory -Force)
