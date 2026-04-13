@@ -36,6 +36,7 @@ tests:
 auth:
   linuxSmbMode: currentContext
   secretReference: ''
+  linuxProfiles: []
 targets:
   - id: fs01
     fqdn: fs01.corp.local

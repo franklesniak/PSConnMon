@@ -8,12 +8,17 @@ from pathlib import Path
 import duckdb
 
 from .models import (
+    AgentSummary,
     EventRecord,
     FleetSummary,
     ImportSourceStatus,
     ImportStatus,
     IncidentSummary,
+    LatencyPoint,
     PathSummary,
+    PathChangeSummary,
+    SiteSummary,
+    TargetDetail,
     TargetSummary,
 )
 
@@ -324,6 +329,7 @@ class StorageRepository:
             row = connection.execute("""
                 SELECT
                     COUNT(*) AS total_events,
+                    COUNT(DISTINCT agent_id) AS total_agents,
                     COUNT(DISTINCT target_id) AS total_targets,
                     COUNT(DISTINCT site_id) AS active_sites,
                     SUM(CASE WHEN result IN ('FAILURE', 'FATAL') THEN 1 ELSE 0 END) AS failure_events,
@@ -334,11 +340,12 @@ class StorageRepository:
 
         return FleetSummary(
             total_events=int(row[0] or 0),
-            total_targets=int(row[1] or 0),
-            active_sites=int(row[2] or 0),
-            failure_events=int(row[3] or 0),
-            timeout_events=int(row[4] or 0),
-            latest_timestamp_utc=row[5],
+            total_agents=int(row[1] or 0),
+            total_targets=int(row[2] or 0),
+            active_sites=int(row[3] or 0),
+            failure_events=int(row[4] or 0),
+            timeout_events=int(row[5] or 0),
+            latest_timestamp_utc=row[6],
         )
 
     def list_targets(self) -> list[TargetSummary]:
@@ -348,15 +355,18 @@ class StorageRepository:
             WITH ranked AS (
                 SELECT
                     target_id,
+                    agent_id,
                     fqdn,
                     site_id,
+                    target_address,
+                    test_type,
                     result,
                     latency_ms,
                     timestamp_utc,
                     ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp_utc DESC) AS row_number
                 FROM events
             )
-            SELECT target_id, fqdn, site_id, result, latency_ms, timestamp_utc
+            SELECT target_id, agent_id, fqdn, site_id, target_address, test_type, result, latency_ms, timestamp_utc
             FROM ranked
             WHERE row_number = 1
             ORDER BY fqdn
@@ -368,10 +378,109 @@ class StorageRepository:
         return [
             TargetSummary(
                 target_id=row[0],
-                fqdn=row[1],
-                site_id=row[2],
-                latest_result=row[3],
-                last_latency_ms=row[4],
+                agent_id=row[1],
+                fqdn=row[2],
+                site_id=row[3],
+                target_address=row[4],
+                last_test_type=row[5],
+                latest_result=row[6],
+                last_latency_ms=row[7],
+                last_timestamp_utc=row[8],
+            )
+            for row in rows
+        ]
+
+    def list_agents(self) -> list[AgentSummary]:
+        """Return current reporting state per agent."""
+
+        query = """
+            WITH latest_target_state AS (
+                SELECT
+                    agent_id,
+                    site_id,
+                    target_id,
+                    result,
+                    latency_ms,
+                    timestamp_utc,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY agent_id, target_id
+                        ORDER BY timestamp_utc DESC
+                    ) AS row_number
+                FROM events
+            )
+            SELECT
+                agent_id,
+                MAX(site_id) AS site_id,
+                COUNT(*) AS total_targets,
+                SUM(CASE WHEN result = 'SUCCESS' THEN 1 ELSE 0 END) AS healthy_targets,
+                SUM(CASE WHEN result IN ('FAILURE', 'FATAL') THEN 1 ELSE 0 END) AS failing_targets,
+                SUM(CASE WHEN result = 'TIMEOUT' THEN 1 ELSE 0 END) AS timeout_targets,
+                AVG(latency_ms) AS average_latency_ms,
+                MAX(timestamp_utc) AS last_timestamp_utc
+            FROM latest_target_state
+            WHERE row_number = 1
+            GROUP BY agent_id
+            ORDER BY last_timestamp_utc DESC, agent_id
+        """
+
+        with self._connect() as connection:
+            rows = connection.execute(query).fetchall()
+
+        return [
+            AgentSummary(
+                agent_id=row[0],
+                site_id=row[1],
+                total_targets=int(row[2] or 0),
+                healthy_targets=int(row[3] or 0),
+                failing_targets=int(row[4] or 0),
+                timeout_targets=int(row[5] or 0),
+                average_latency_ms=row[6],
+                last_timestamp_utc=row[7],
+            )
+            for row in rows
+        ]
+
+    def list_sites(self) -> list[SiteSummary]:
+        """Return current reporting state per site."""
+
+        query = """
+            WITH latest_target_state AS (
+                SELECT
+                    site_id,
+                    agent_id,
+                    target_id,
+                    result,
+                    latency_ms,
+                    timestamp_utc,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY site_id, target_id
+                        ORDER BY timestamp_utc DESC
+                    ) AS row_number
+                FROM events
+            )
+            SELECT
+                site_id,
+                COUNT(DISTINCT agent_id) AS agent_count,
+                COUNT(*) AS target_count,
+                SUM(CASE WHEN result IN ('FAILURE', 'FATAL', 'TIMEOUT') THEN 1 ELSE 0 END) AS failing_targets,
+                AVG(latency_ms) AS average_latency_ms,
+                MAX(timestamp_utc) AS last_timestamp_utc
+            FROM latest_target_state
+            WHERE row_number = 1
+            GROUP BY site_id
+            ORDER BY site_id
+        """
+
+        with self._connect() as connection:
+            rows = connection.execute(query).fetchall()
+
+        return [
+            SiteSummary(
+                site_id=row[0],
+                agent_count=int(row[1] or 0),
+                target_count=int(row[2] or 0),
+                failing_targets=int(row[3] or 0),
+                average_latency_ms=row[4],
                 last_timestamp_utc=row[5],
             )
             for row in rows
@@ -442,6 +551,156 @@ class StorageRepository:
             )
             for row in rows
         ]
+
+    def list_path_changes(self, limit: int = 25) -> list[PathChangeSummary]:
+        """Return recent traceroute path transitions."""
+
+        query = """
+            WITH per_path AS (
+                SELECT
+                    target_id,
+                    fqdn,
+                    site_id,
+                    agent_id,
+                    path_hash,
+                    MAX(timestamp_utc) AS timestamp_utc,
+                    COUNT(DISTINCT hop_index) AS hop_count
+                FROM events
+                WHERE test_type = 'traceroute' AND path_hash IS NOT NULL
+                GROUP BY target_id, fqdn, site_id, agent_id, path_hash
+            ),
+            ordered AS (
+                SELECT
+                    target_id,
+                    fqdn,
+                    site_id,
+                    agent_id,
+                    path_hash,
+                    hop_count,
+                    timestamp_utc,
+                    LAG(path_hash) OVER (
+                        PARTITION BY target_id
+                        ORDER BY timestamp_utc
+                    ) AS previous_path_hash
+                FROM per_path
+            )
+            SELECT
+                target_id,
+                fqdn,
+                site_id,
+                agent_id,
+                previous_path_hash,
+                path_hash,
+                hop_count,
+                timestamp_utc
+            FROM ordered
+            WHERE previous_path_hash IS NOT NULL AND previous_path_hash <> path_hash
+            ORDER BY timestamp_utc DESC
+            LIMIT ?
+        """
+
+        with self._connect() as connection:
+            rows = connection.execute(query, [limit]).fetchall()
+
+        return [
+            PathChangeSummary(
+                target_id=row[0],
+                fqdn=row[1],
+                site_id=row[2],
+                agent_id=row[3],
+                previous_path_hash=row[4],
+                path_hash=row[5],
+                hop_count=int(row[6] or 0),
+                timestamp_utc=self._normalize_timestamp(row[7]),
+            )
+            for row in rows
+        ]
+
+    def get_target_detail(self, target_id: str, timeline_limit: int = 48) -> TargetDetail | None:
+        """Return a detailed drilldown payload for one target."""
+
+        targets = [target for target in self.list_targets() if target.target_id == target_id]
+        if not targets:
+            return None
+
+        timeline_query = """
+            SELECT timestamp_utc, latency_ms, result, test_type
+            FROM events
+            WHERE target_id = ? AND latency_ms IS NOT NULL
+            ORDER BY timestamp_utc DESC
+            LIMIT ?
+        """
+        path_query = """
+            SELECT
+                target_id,
+                fqdn,
+                COALESCE(path_hash, 'unknown') AS path_hash,
+                MAX(timestamp_utc) AS last_seen_utc,
+                COUNT(DISTINCT hop_index) AS hop_count,
+                AVG(hop_latency_ms) AS average_hop_latency_ms
+            FROM events
+            WHERE target_id = ? AND test_type = 'traceroute'
+            GROUP BY target_id, fqdn, COALESCE(path_hash, 'unknown')
+            ORDER BY last_seen_utc DESC
+            LIMIT 8
+        """
+        incident_query = """
+            SELECT
+                target_id,
+                fqdn,
+                test_type,
+                result,
+                error_code,
+                details,
+                timestamp_utc
+            FROM events
+            WHERE target_id = ? AND result NOT IN ('SUCCESS', 'INFO')
+            ORDER BY timestamp_utc DESC
+            LIMIT 12
+        """
+
+        with self._connect() as connection:
+            timeline_rows = connection.execute(
+                timeline_query, [target_id, timeline_limit]
+            ).fetchall()
+            path_rows = connection.execute(path_query, [target_id]).fetchall()
+            incident_rows = connection.execute(incident_query, [target_id]).fetchall()
+
+        return TargetDetail(
+            target=targets[0],
+            latency_series=[
+                LatencyPoint(
+                    timestamp_utc=self._normalize_timestamp(row[0]),
+                    latency_ms=row[1],
+                    result=row[2],
+                    test_type=row[3],
+                )
+                for row in reversed(timeline_rows)
+            ],
+            incidents=[
+                IncidentSummary(
+                    target_id=row[0],
+                    fqdn=row[1],
+                    test_type=row[2],
+                    result=row[3],
+                    error_code=row[4],
+                    details=row[5],
+                    timestamp_utc=self._normalize_timestamp(row[6]),
+                )
+                for row in incident_rows
+            ],
+            paths=[
+                PathSummary(
+                    target_id=row[0],
+                    fqdn=row[1],
+                    path_hash=row[2],
+                    last_seen_utc=row[3],
+                    hop_count=int(row[4] or 0),
+                    average_hop_latency_ms=row[5],
+                )
+                for row in path_rows
+            ],
+        )
 
     @staticmethod
     def _event_to_row(event: EventRecord) -> tuple[object, ...]:

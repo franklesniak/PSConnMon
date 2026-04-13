@@ -12,8 +12,13 @@
 1. Validate the config with `Test-PSConnMonConfig`.
 2. Confirm `ThreadJob` is installed with `Install-Module ThreadJob -Scope CurrentUser -AllowClobber` if missing.
 3. Confirm required native commands exist for the enabled probes on the current platform.
-4. Inspect the local spool directory for pending JSONL batches.
-5. Run `Invoke-PSConnMon -RunOnce` to isolate probe and serialization failures.
+4. For Linux `domainAuth` or credentialed SMB probes, confirm `smbclient`,
+   `kinit`, and `klist` are installed when the selected profile mode requires
+   them.
+5. Confirm any Linux secret JSON files and referenced keytabs stay under the
+   config directory or `<spoolDirectory>/secrets`.
+6. Inspect the local spool directory for pending JSONL batches.
+7. Run `Invoke-PSConnMon -RunOnce` to isolate probe and serialization failures.
 
 ## Service Checks
 
@@ -35,6 +40,8 @@
 ## Common Failure Modes
 
 - Missing Linux SMB tooling should surface as `SKIPPED`, not a process crash.
+- Missing `kinit` or `klist` should surface as `SKIPPED` for Linux Kerberos
+  workflows, not a process crash.
 - Share failures should not block ping, DNS, traceroute, or internet-quality probes.
 - Dashboard gaps usually indicate import, ingest, or timestamp issues before they indicate query problems.
 - Route visualization anomalies usually indicate missing traceroute events or inconsistent path hashes.

@@ -35,6 +35,7 @@ tests:
 auth:
   linuxSmbMode: currentContext
   secretReference: ''
+  linuxProfiles: []
 targets:
   - id: hq-edge
     fqdn: hq-edge.example.net

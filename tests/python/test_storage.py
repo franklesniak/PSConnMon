@@ -40,11 +40,15 @@ def test_storage_ingests_and_summarizes_events(tmp_path: Path) -> None:
     inserted = repository.ingest_events([event])
     summary = repository.get_fleet_summary()
     targets = repository.list_targets()
+    agents = repository.list_agents()
 
     assert inserted == 1
     assert summary.total_events == 1
+    assert summary.total_agents == 1
     assert summary.total_targets == 1
     assert targets[0].fqdn == "fs01.corp.local"
+    assert targets[0].agent_id == "branch-01"
+    assert agents[0].agent_id == "branch-01"
 
 
 def test_storage_tracks_import_source_status(tmp_path: Path) -> None:

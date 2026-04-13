@@ -647,6 +647,504 @@ function Get-PSConnMonEventRecord {
     return [pscustomobject]$eventValue
 }
 
+function Get-PSConnMonConfigDirectory {
+    # .SYNOPSIS
+    # Returns the active PSConnMon config directory.
+    #
+    # .DESCRIPTION
+    # Resolves the runtime config directory captured during config loading and
+    # falls back to the current working directory when no runtime metadata is
+    # present.
+    #
+    # .PARAMETER Config
+    # The normalized PSConnMon configuration.
+    #
+    # .EXAMPLE
+    # Get-PSConnMonConfigDirectory -Config $config
+    #
+    # .INPUTS
+    # None. You can't pipe objects to Get-PSConnMonConfigDirectory.
+    #
+    # .OUTPUTS
+    # System.String. The resolved config directory.
+    #
+    # .NOTES
+    # Version: 0.3.20260412.0
+
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Config
+    )
+
+    if (
+        $Config.ContainsKey('_runtime') -and
+        ($Config._runtime -is [hashtable]) -and
+        (-not [string]::IsNullOrWhiteSpace($Config._runtime.configDirectory))
+    ) {
+        return [System.IO.Path]::GetFullPath([string]$Config._runtime.configDirectory)
+    }
+
+    return [System.IO.Path]::GetFullPath((Get-Location).Path)
+}
+
+function Test-PSConnMonPathIsUnderAllowedRoots {
+    # .SYNOPSIS
+    # Tests whether one path remains under an allowlisted root.
+    #
+    # .DESCRIPTION
+    # Compares a normalized candidate path against one or more normalized root
+    # paths and returns `$true` when the candidate stays within at least one
+    # root boundary.
+    #
+    # .PARAMETER CandidatePath
+    # The normalized path to validate.
+    #
+    # .PARAMETER AllowedRoots
+    # One or more normalized root paths.
+    #
+    # .EXAMPLE
+    # Test-PSConnMonPathIsUnderAllowedRoots -CandidatePath $path -AllowedRoots $roots
+    #
+    # .INPUTS
+    # None. You can't pipe objects to Test-PSConnMonPathIsUnderAllowedRoots.
+    #
+    # .OUTPUTS
+    # System.Boolean. Returns `$true` when the candidate is allowlisted.
+    #
+    # .NOTES
+    # Version: 0.3.20260412.0
+
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)][string]$CandidatePath,
+        [Parameter(Mandatory = $true)][string[]]$AllowedRoots
+    )
+
+    foreach ($allowedRoot in $AllowedRoots) {
+        $normalizedRoot = $allowedRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+        if (($CandidatePath -eq $normalizedRoot) -or $CandidatePath.StartsWith(($normalizedRoot + [System.IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function New-PSConnMonProbeException {
+    # .SYNOPSIS
+    # Creates a PSConnMon exception with a normalized error code.
+    #
+    # .DESCRIPTION
+    # Wraps a message in an InvalidOperationException and stores a PSConnMon
+    # error code in the exception data bag so probe callers can emit
+    # deterministic event error codes without parsing free-form text.
+    #
+    # .PARAMETER ErrorCode
+    # The normalized PSConnMon error code.
+    #
+    # .PARAMETER Message
+    # The human-readable exception message.
+    #
+    # .EXAMPLE
+    # throw (New-PSConnMonProbeException -ErrorCode 'LinuxSecretFileMissing' -Message 'Linux secret file was not found.')
+    #
+    # .INPUTS
+    # None. You can't pipe objects to New-PSConnMonProbeException.
+    #
+    # .OUTPUTS
+    # System.InvalidOperationException. The tagged exception instance.
+    #
+    # .NOTES
+    # Version: 0.3.20260412.0
+
+    [CmdletBinding()]
+    [OutputType([System.InvalidOperationException])]
+    param(
+        [Parameter(Mandatory = $true)][string]$ErrorCode,
+        [Parameter(Mandatory = $true)][string]$Message
+    )
+
+    $exception = New-Object System.InvalidOperationException($Message)
+    $exception.Data['PSConnMonErrorCode'] = $ErrorCode
+    return $exception
+}
+
+function Resolve-PSConnMonTrustedFilePath {
+    # .SYNOPSIS
+    # Resolves an allowlisted local file path for PSConnMon secrets.
+    #
+    # .DESCRIPTION
+    # Resolves a local file path relative to the config directory or a caller
+    # supplied base directory, enforces allowlisted root boundaries, rejects
+    # symlink leaf nodes, and optionally constrains the file extension.
+    #
+    # .PARAMETER Config
+    # The normalized PSConnMon configuration.
+    #
+    # .PARAMETER InputPath
+    # The caller-supplied file path.
+    #
+    # .PARAMETER BaseDirectory
+    # Optional base directory used for relative path resolution.
+    #
+    # .PARAMETER ErrorCodePrefix
+    # Prefix used to construct deterministic PSConnMon error codes.
+    #
+    # .PARAMETER PathLabel
+    # Human-readable label used in error messages.
+    #
+    # .PARAMETER AllowedExtensions
+    # Optional allowlist of lowercase file extensions.
+    #
+    # .EXAMPLE
+    # Resolve-PSConnMonTrustedFilePath -Config $config -InputPath './secrets/linux-share.json' -ErrorCodePrefix 'LinuxSecret' -PathLabel 'Linux auth secret file' -AllowedExtensions @('.json')
+    #
+    # .INPUTS
+    # None. You can't pipe objects to Resolve-PSConnMonTrustedFilePath.
+    #
+    # .OUTPUTS
+    # System.String. The resolved trusted file path.
+    #
+    # .NOTES
+    # Version: 0.3.20260412.0
+
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Config,
+        [Parameter(Mandatory = $true)][string]$InputPath,
+        [Parameter(Mandatory = $false)][string]$BaseDirectory = '',
+        [Parameter(Mandatory = $true)][string]$ErrorCodePrefix,
+        [Parameter(Mandatory = $true)][string]$PathLabel,
+        [Parameter(Mandatory = $false)][string[]]$AllowedExtensions = @()
+    )
+
+    if ([string]::IsNullOrWhiteSpace($InputPath)) {
+        throw (New-PSConnMonProbeException -ErrorCode ('{0}PathRequired' -f $ErrorCodePrefix) -Message ('{0} path is required.' -f $PathLabel))
+    }
+
+    $resolvedBaseDirectory = if ([string]::IsNullOrWhiteSpace($BaseDirectory)) {
+        Get-PSConnMonConfigDirectory -Config $Config
+    } else {
+        [System.IO.Path]::GetFullPath($BaseDirectory)
+    }
+
+    $candidatePath = if ([System.IO.Path]::IsPathRooted($InputPath)) {
+        [System.IO.Path]::GetFullPath($InputPath)
+    } else {
+        [System.IO.Path]::GetFullPath((Join-Path -Path $resolvedBaseDirectory -ChildPath $InputPath))
+    }
+
+    $allowedRoots = @(
+        (Get-PSConnMonConfigDirectory -Config $Config),
+        [System.IO.Path]::GetFullPath((Join-Path -Path $Config.agent.spoolDirectory -ChildPath 'secrets'))
+    )
+
+    if (-not (Test-PSConnMonPathIsUnderAllowedRoots -CandidatePath $candidatePath -AllowedRoots $allowedRoots)) {
+        throw (New-PSConnMonProbeException -ErrorCode ('{0}PathNotAllowed' -f $ErrorCodePrefix) -Message ('{0} must remain under the config directory or spool secrets directory. Path: {1}' -f $PathLabel, $candidatePath))
+    }
+
+    if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
+        throw (New-PSConnMonProbeException -ErrorCode ('{0}FileMissing' -f $ErrorCodePrefix) -Message ('{0} was not found: {1}' -f $PathLabel, $candidatePath))
+    }
+
+    $resolvedPath = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $candidatePath -ErrorAction Stop).ProviderPath)
+    if (-not (Test-PSConnMonPathIsUnderAllowedRoots -CandidatePath $resolvedPath -AllowedRoots $allowedRoots)) {
+        throw (New-PSConnMonProbeException -ErrorCode ('{0}PathNotAllowed' -f $ErrorCodePrefix) -Message ('{0} resolved outside the allowlisted roots. Path: {1}' -f $PathLabel, $resolvedPath))
+    }
+
+    $itemValue = Get-Item -LiteralPath $candidatePath -Force
+    if (($itemValue.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw (New-PSConnMonProbeException -ErrorCode ('{0}SymlinkNotAllowed' -f $ErrorCodePrefix) -Message ('{0} must not be a symlink or reparse point. Path: {1}' -f $PathLabel, $candidatePath))
+    }
+
+    if ($AllowedExtensions.Count -gt 0) {
+        $extension = ([System.IO.Path]::GetExtension($resolvedPath)).ToLowerInvariant()
+        if ($extension -notin $AllowedExtensions) {
+            throw (New-PSConnMonProbeException -ErrorCode ('{0}FileExtensionInvalid' -f $ErrorCodePrefix) -Message ('{0} must use one of these extensions: {1}' -f $PathLabel, (($AllowedExtensions | Sort-Object) -join ', ')))
+        }
+    }
+
+    return $resolvedPath
+}
+
+function Resolve-PSConnMonTrustedOutputPath {
+    # .SYNOPSIS
+    # Resolves an allowlisted writable local path for PSConnMon secrets.
+    #
+    # .DESCRIPTION
+    # Resolves a local output path relative to the config directory or a caller
+    # supplied base directory and enforces the same allowlisted root boundary
+    # used for local secret files. Existing leaf and parent symlinks are
+    # rejected.
+    #
+    # .PARAMETER Config
+    # The normalized PSConnMon configuration.
+    #
+    # .PARAMETER InputPath
+    # The caller-supplied output path.
+    #
+    # .PARAMETER BaseDirectory
+    # Optional base directory used for relative path resolution.
+    #
+    # .PARAMETER ErrorCodePrefix
+    # Prefix used to construct deterministic PSConnMon error codes.
+    #
+    # .PARAMETER PathLabel
+    # Human-readable label used in error messages.
+    #
+    # .EXAMPLE
+    # Resolve-PSConnMonTrustedOutputPath -Config $config -InputPath './secrets/krb5cc-fs01' -ErrorCodePrefix 'LinuxCredentialCache' -PathLabel 'Linux credential cache path'
+    #
+    # .INPUTS
+    # None. You can't pipe objects to Resolve-PSConnMonTrustedOutputPath.
+    #
+    # .OUTPUTS
+    # System.String. The resolved output path.
+    #
+    # .NOTES
+    # Version: 0.3.20260412.0
+
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Config,
+        [Parameter(Mandatory = $true)][string]$InputPath,
+        [Parameter(Mandatory = $false)][string]$BaseDirectory = '',
+        [Parameter(Mandatory = $true)][string]$ErrorCodePrefix,
+        [Parameter(Mandatory = $true)][string]$PathLabel
+    )
+
+    if ([string]::IsNullOrWhiteSpace($InputPath)) {
+        throw (New-PSConnMonProbeException -ErrorCode ('{0}PathRequired' -f $ErrorCodePrefix) -Message ('{0} path is required.' -f $PathLabel))
+    }
+
+    $resolvedBaseDirectory = if ([string]::IsNullOrWhiteSpace($BaseDirectory)) {
+        Get-PSConnMonConfigDirectory -Config $Config
+    } else {
+        [System.IO.Path]::GetFullPath($BaseDirectory)
+    }
+
+    $candidatePath = if ([System.IO.Path]::IsPathRooted($InputPath)) {
+        [System.IO.Path]::GetFullPath($InputPath)
+    } else {
+        [System.IO.Path]::GetFullPath((Join-Path -Path $resolvedBaseDirectory -ChildPath $InputPath))
+    }
+
+    $allowedRoots = @(
+        (Get-PSConnMonConfigDirectory -Config $Config),
+        [System.IO.Path]::GetFullPath((Join-Path -Path $Config.agent.spoolDirectory -ChildPath 'secrets'))
+    )
+
+    if (-not (Test-PSConnMonPathIsUnderAllowedRoots -CandidatePath $candidatePath -AllowedRoots $allowedRoots)) {
+        throw (New-PSConnMonProbeException -ErrorCode ('{0}PathNotAllowed' -f $ErrorCodePrefix) -Message ('{0} must remain under the config directory or spool secrets directory. Path: {1}' -f $PathLabel, $candidatePath))
+    }
+
+    if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+        $itemValue = Get-Item -LiteralPath $candidatePath -Force
+        if (($itemValue.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw (New-PSConnMonProbeException -ErrorCode ('{0}SymlinkNotAllowed' -f $ErrorCodePrefix) -Message ('{0} must not be a symlink or reparse point. Path: {1}' -f $PathLabel, $candidatePath))
+        }
+    }
+
+    $parentPath = Split-Path -Path $candidatePath -Parent
+    if (-not [string]::IsNullOrWhiteSpace($parentPath) -and (Test-Path -LiteralPath $parentPath -PathType Container)) {
+        $resolvedParentPath = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $parentPath -ErrorAction Stop).ProviderPath)
+        if (-not (Test-PSConnMonPathIsUnderAllowedRoots -CandidatePath $resolvedParentPath -AllowedRoots $allowedRoots)) {
+            throw (New-PSConnMonProbeException -ErrorCode ('{0}PathNotAllowed' -f $ErrorCodePrefix) -Message ('{0} resolved outside the allowlisted roots. Path: {1}' -f $PathLabel, $resolvedParentPath))
+        }
+
+        $parentItemValue = Get-Item -LiteralPath $parentPath -Force
+        if (($parentItemValue.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw (New-PSConnMonProbeException -ErrorCode ('{0}ParentSymlinkNotAllowed' -f $ErrorCodePrefix) -Message ('{0} parent directory must not be a symlink or reparse point. Path: {1}' -f $PathLabel, $parentPath))
+        }
+    }
+
+    return $candidatePath
+}
+
+function Resolve-PSConnMonLinuxAuthProfileDefinition {
+    # .SYNOPSIS
+    # Resolves one Linux auth profile definition.
+    #
+    # .DESCRIPTION
+    # Validates one configured Linux auth profile, resolves any referenced local
+    # secret files and keytabs, and returns a runtime-ready profile context that
+    # can be used by Linux share and Kerberos probes.
+    #
+    # .PARAMETER Config
+    # The normalized PSConnMon configuration.
+    #
+    # .PARAMETER Profile
+    # The Linux auth profile definition.
+    #
+    # .EXAMPLE
+    # Resolve-PSConnMonLinuxAuthProfileDefinition -Config $config -Profile $config.auth.linuxProfiles[0]
+    #
+    # .INPUTS
+    # None. You can't pipe objects to Resolve-PSConnMonLinuxAuthProfileDefinition.
+    #
+    # .OUTPUTS
+    # System.Collections.Hashtable. The resolved profile context.
+    #
+    # .NOTES
+    # Version: 0.3.20260412.0
+
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Config,
+        [Parameter(Mandatory = $true)][hashtable]$Profile
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Profile.id)) {
+        throw (New-PSConnMonProbeException -ErrorCode 'LinuxProfileIdRequired' -Message 'Each Linux auth profile requires an id.')
+    }
+
+    $profileMode = if ($Profile.ContainsKey('mode')) { [string]$Profile.mode } else { '' }
+    if ($profileMode -notin @('currentContext', 'kerberosKeytab', 'usernamePassword')) {
+        throw (New-PSConnMonProbeException -ErrorCode 'LinuxProfileModeInvalid' -Message ('Linux auth profile {0} uses an unsupported mode.' -f $Profile.id))
+    }
+
+    $profileContext = @{
+        id = [string]$Profile.id
+        mode = $profileMode
+        secretReference = if ($Profile.ContainsKey('secretReference')) { [string]$Profile.secretReference } else { '' }
+    }
+
+    if ($profileMode -eq 'currentContext') {
+        if (-not [string]::IsNullOrWhiteSpace($profileContext.secretReference)) {
+            throw (New-PSConnMonProbeException -ErrorCode 'LinuxCurrentContextSecretUnsupported' -Message ('Linux auth profile {0} uses currentContext and must not define a secretReference.' -f $Profile.id))
+        }
+
+        return $profileContext
+    }
+
+    if ([string]::IsNullOrWhiteSpace($profileContext.secretReference)) {
+        throw (New-PSConnMonProbeException -ErrorCode 'LinuxSecretReferenceRequired' -Message ('Linux auth profile {0} requires a secretReference.' -f $Profile.id))
+    }
+
+    $secretPath = Resolve-PSConnMonTrustedFilePath -Config $Config -InputPath $profileContext.secretReference -ErrorCodePrefix 'LinuxSecret' -PathLabel 'Linux auth secret file' -AllowedExtensions @('.json')
+    $secretDirectory = Split-Path -Path $secretPath -Parent
+
+    try {
+        $secretValue = ConvertTo-PSConnMonHashtable -InputObject (ConvertFrom-Json -InputObject (Get-Content -LiteralPath $secretPath -Raw -Encoding UTF8))
+    } catch {
+        throw (New-PSConnMonProbeException -ErrorCode 'LinuxSecretFileInvalid' -Message ('Linux auth secret file is not valid JSON. Path: {0}' -f $secretPath))
+    }
+
+    if (-not ($secretValue -is [hashtable])) {
+        throw (New-PSConnMonProbeException -ErrorCode 'LinuxSecretFileInvalid' -Message ('Linux auth secret file must deserialize to an object. Path: {0}' -f $secretPath))
+    }
+
+    $profileContext.secretPath = $secretPath
+
+    if ($profileMode -eq 'kerberosKeytab') {
+        if ([string]::IsNullOrWhiteSpace([string]$secretValue.principal)) {
+            throw (New-PSConnMonProbeException -ErrorCode 'LinuxKerberosPrincipalRequired' -Message ('Linux auth profile {0} requires principal in its secret file.' -f $Profile.id))
+        }
+
+        if ([string]::IsNullOrWhiteSpace([string]$secretValue.keytabPath)) {
+            throw (New-PSConnMonProbeException -ErrorCode 'LinuxKeytabPathRequired' -Message ('Linux auth profile {0} requires keytabPath in its secret file.' -f $Profile.id))
+        }
+
+        $profileContext.principal = [string]$secretValue.principal
+        $profileContext.keytabPath = Resolve-PSConnMonTrustedFilePath -Config $Config -InputPath ([string]$secretValue.keytabPath) -BaseDirectory $secretDirectory -ErrorCodePrefix 'LinuxKeytab' -PathLabel 'Linux keytab file'
+
+        $credentialCachePath = if ($secretValue.ContainsKey('ccachePath') -and (-not [string]::IsNullOrWhiteSpace([string]$secretValue.ccachePath))) {
+            Resolve-PSConnMonTrustedOutputPath -Config $Config -InputPath ([string]$secretValue.ccachePath) -BaseDirectory $secretDirectory -ErrorCodePrefix 'LinuxCredentialCache' -PathLabel 'Linux credential cache path'
+        } else {
+            Resolve-PSConnMonTrustedOutputPath -Config $Config -InputPath ([System.IO.Path]::GetFullPath((Join-Path -Path (Join-Path -Path $Config.agent.spoolDirectory -ChildPath 'secrets') -ChildPath ('krb5cc-{0}' -f $Profile.id)))) -ErrorCodePrefix 'LinuxCredentialCache' -PathLabel 'Linux credential cache path'
+        }
+
+        $profileContext.ccachePath = $credentialCachePath
+        return $profileContext
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$secretValue.username)) {
+        throw (New-PSConnMonProbeException -ErrorCode 'LinuxUsernameRequired' -Message ('Linux auth profile {0} requires username in its secret file.' -f $Profile.id))
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$secretValue.password)) {
+        throw (New-PSConnMonProbeException -ErrorCode 'LinuxPasswordRequired' -Message ('Linux auth profile {0} requires password in its secret file.' -f $Profile.id))
+    }
+
+    $profileContext.username = [string]$secretValue.username
+    $profileContext.password = [string]$secretValue.password
+    $profileContext.domain = if ($secretValue.ContainsKey('domain')) { [string]$secretValue.domain } else { '' }
+    return $profileContext
+}
+
+function Resolve-PSConnMonLinuxAuthProfileContext {
+    # .SYNOPSIS
+    # Selects the effective Linux auth profile for a probe.
+    #
+    # .DESCRIPTION
+    # Applies PSConnMon Linux auth profile precedence for one target or share
+    # probe. Share-scoped profile references override target-scoped references.
+    # When no explicit profile is configured, the legacy current-context Linux
+    # behavior remains active.
+    #
+    # .PARAMETER Config
+    # The normalized PSConnMon configuration.
+    #
+    # .PARAMETER Target
+    # The target definition.
+    #
+    # .PARAMETER Share
+    # Optional share definition for share-scoped overrides.
+    #
+    # .EXAMPLE
+    # Resolve-PSConnMonLinuxAuthProfileContext -Config $config -Target $config.targets[0] -Share $config.targets[0].shares[0]
+    #
+    # .INPUTS
+    # None. You can't pipe objects to Resolve-PSConnMonLinuxAuthProfileContext.
+    #
+    # .OUTPUTS
+    # System.Collections.Hashtable. The effective profile context.
+    #
+    # .NOTES
+    # Version: 0.3.20260412.0
+
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Config,
+        [Parameter(Mandatory = $true)][hashtable]$Target,
+        [Parameter(Mandatory = $false)][AllowNull()][hashtable]$Share = $null
+    )
+
+    $selectedProfileId = ''
+    if (($null -ne $Share) -and $Share.ContainsKey('linuxProfileId') -and (-not [string]::IsNullOrWhiteSpace([string]$Share.linuxProfileId))) {
+        $selectedProfileId = [string]$Share.linuxProfileId
+    } elseif ($Target.ContainsKey('linuxProfileId') -and (-not [string]::IsNullOrWhiteSpace([string]$Target.linuxProfileId))) {
+        $selectedProfileId = [string]$Target.linuxProfileId
+    }
+
+    if ([string]::IsNullOrWhiteSpace($selectedProfileId)) {
+        return @{
+            id = ''
+            mode = 'currentContext'
+            secretReference = ''
+        }
+    }
+
+    $profiles = if ($Config.auth.ContainsKey('linuxProfiles')) {
+        ConvertTo-PSConnMonArray -InputObject $Config.auth.linuxProfiles
+    } else {
+        @()
+    }
+
+    $profileValue = $profiles | Where-Object { $_.id -eq $selectedProfileId } | Select-Object -First 1
+    if ($null -eq $profileValue) {
+        throw (New-PSConnMonProbeException -ErrorCode 'LinuxProfileNotFound' -Message ('Linux auth profile was not found: {0}' -f $selectedProfileId))
+    }
+
+    return (Resolve-PSConnMonLinuxAuthProfileDefinition -Config $Config -Profile $profileValue)
+}
+
 function Resolve-PSConnMonExtensionPath {
     # .SYNOPSIS
     # Resolves and validates a configured extension script path.
@@ -1101,6 +1599,7 @@ function Test-PSConnMonConfig {
         auth = @{
             linuxSmbMode = 'currentContext'
             secretReference = ''
+            linuxProfiles = @()
         }
         targets = @()
         extensions = @()
@@ -1110,6 +1609,7 @@ function Test-PSConnMonConfig {
     $normalizedConfig.targets = ConvertTo-PSConnMonArray -InputObject $normalizedConfig.targets
     $normalizedConfig.extensions = ConvertTo-PSConnMonArray -InputObject $normalizedConfig.extensions
     $normalizedConfig.tests.enabled = ConvertTo-PSConnMonArray -InputObject $normalizedConfig.tests.enabled
+    $normalizedConfig.auth.linuxProfiles = ConvertTo-PSConnMonArray -InputObject $normalizedConfig.auth.linuxProfiles
 
     if ($normalizedConfig.schemaVersion -ne '1.0') {
         throw 'Only schemaVersion 1.0 is supported.'
@@ -1125,6 +1625,31 @@ function Test-PSConnMonConfig {
 
     if ($normalizedConfig.targets.Count -lt 1) {
         throw 'At least one target is required.'
+    }
+
+    $linuxProfileIds = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($linuxProfileValue in $normalizedConfig.auth.linuxProfiles) {
+        if ([string]::IsNullOrWhiteSpace($linuxProfileValue.id)) {
+            throw 'Each auth.linuxProfiles entry requires an id.'
+        }
+
+        if (-not $linuxProfileIds.Add([string]$linuxProfileValue.id)) {
+            throw ('Duplicate Linux auth profile id: {0}' -f $linuxProfileValue.id)
+        }
+
+        if (-not $linuxProfileValue.ContainsKey('mode') -or [string]::IsNullOrWhiteSpace([string]$linuxProfileValue.mode)) {
+            throw ('Linux auth profile {0} requires mode.' -f $linuxProfileValue.id)
+        }
+
+        if ([string]$linuxProfileValue.mode -notin @('currentContext', 'kerberosKeytab', 'usernamePassword')) {
+            throw ('Linux auth profile {0} uses an unsupported mode.' -f $linuxProfileValue.id)
+        }
+
+        if (-not $linuxProfileValue.ContainsKey('secretReference')) {
+            $linuxProfileValue.secretReference = ''
+        }
+
+        [void](Resolve-PSConnMonLinuxAuthProfileDefinition -Config $normalizedConfig -Profile $linuxProfileValue)
     }
 
     $targetIds = New-Object System.Collections.Generic.HashSet[string]
@@ -1165,6 +1690,12 @@ function Test-PSConnMonConfig {
             $targetValue.tags = ConvertTo-PSConnMonArray -InputObject $targetValue.tags
         }
 
+        if (-not $targetValue.ContainsKey('linuxProfileId')) {
+            $targetValue.linuxProfileId = ''
+        } elseif (-not [string]::IsNullOrWhiteSpace([string]$targetValue.linuxProfileId) -and (-not $linuxProfileIds.Contains([string]$targetValue.linuxProfileId))) {
+            throw ('Target {0} references an unknown linuxProfileId: {1}' -f $targetValue.id, $targetValue.linuxProfileId)
+        }
+
         if (-not $targetValue.ContainsKey('tests') -or $targetValue.tests.Count -eq 0) {
             $targetValue.tests = @($normalizedConfig.tests.enabled)
         }
@@ -1187,6 +1718,22 @@ function Test-PSConnMonConfig {
 
         if (-not $targetValue.ContainsKey('externalTraceTarget')) {
             $targetValue.externalTraceTarget = $targetValue.address
+        }
+
+        foreach ($shareValue in $targetValue.shares) {
+            if ([string]::IsNullOrWhiteSpace($shareValue.id)) {
+                throw ('Each share for target {0} requires an id.' -f $targetValue.id)
+            }
+
+            if ([string]::IsNullOrWhiteSpace($shareValue.path)) {
+                throw ('Share {0} for target {1} requires path.' -f $shareValue.id, $targetValue.id)
+            }
+
+            if (-not $shareValue.ContainsKey('linuxProfileId')) {
+                $shareValue.linuxProfileId = ''
+            } elseif (-not [string]::IsNullOrWhiteSpace([string]$shareValue.linuxProfileId) -and (-not $linuxProfileIds.Contains([string]$shareValue.linuxProfileId))) {
+                throw ('Share {0} for target {1} references an unknown linuxProfileId: {2}' -f $shareValue.id, $targetValue.id, $shareValue.linuxProfileId)
+            }
         }
     }
 
@@ -1317,6 +1864,7 @@ function Export-PSConnMonSampleConfig {
         auth = @{
             linuxSmbMode = 'currentContext'
             secretReference = ''
+            linuxProfiles = @()
         }
         targets = @(
             @{
@@ -1649,30 +2197,117 @@ function Test-PSConnMonShare {
     $eventValues = New-Object System.Collections.Generic.List[object]
     foreach ($shareValue in $Target.shares) {
         $jobValue = $null
+        $metadataValue = @{
+            shareId = $shareValue.id
+            sharePath = $shareValue.path
+        }
         try {
             if ($script:PSConnMonIsWindows) {
                 $jobValue = Start-ThreadJob -ScriptBlock {
-                    Get-ChildItem -Path $args[0] -Force -ErrorAction Stop | Select-Object -First 1
+                    $itemValue = Get-ChildItem -Path $args[0] -Force -ErrorAction Stop | Select-Object -First 1
+                    return @{
+                        result = if ($null -eq $itemValue) { 'EMPTY' } else { 'SUCCESS' }
+                        details = if ($null -eq $itemValue) { 'Share probe succeeded but returned no visible items.' } else { 'Share access confirmed.' }
+                        errorCode = $null
+                    }
                 } -ArgumentList $shareValue.path
             } else {
+                $linuxProfileContext = Resolve-PSConnMonLinuxAuthProfileContext -Config $Config -Target $Target -Share $shareValue
+                if (-not [string]::IsNullOrWhiteSpace($linuxProfileContext.id)) {
+                    $metadataValue.linuxProfileId = $linuxProfileContext.id
+                }
+
                 if (-not (Get-Command -Name smbclient -ErrorAction SilentlyContinue)) {
                     $eventValues.Add(
                         (Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
                             -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'share' -ProbeName 'Share.Access' `
                             -Result 'SKIPPED' -ErrorCode 'SmbClientMissing' -Details 'smbclient is required for Linux share probes.' `
-                            -Metadata @{ shareId = $shareValue.id; sharePath = $shareValue.path })
+                            -Metadata $metadataValue)
+                    ) | Out-Null
+                    continue
+                }
+
+                if (($linuxProfileContext.mode -eq 'kerberosKeytab') -and (-not (Get-Command -Name kinit -ErrorAction SilentlyContinue))) {
+                    $eventValues.Add(
+                        (Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
+                            -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'share' -ProbeName 'Share.Access' `
+                            -Result 'SKIPPED' -ErrorCode 'LinuxKinitMissing' -Details 'kinit is required for keytab-backed Linux share probes.' `
+                            -Metadata $metadataValue)
                     ) | Out-Null
                     continue
                 }
 
                 $linuxSharePath = Convert-PSConnMonSharePathToLinux -SharePath $shareValue.path
                 $jobValue = Start-ThreadJob -ScriptBlock {
-                    if ($args[1] -ne 'currentContext') {
-                        throw 'Only currentContext Linux SMB mode is currently supported.'
+                    $sharePath = [string]$args[0]
+                    $profileContext = $args[1]
+                    $commandOutput = @()
+                    $exitCode = 0
+
+                    if ($profileContext.mode -eq 'currentContext') {
+                        $commandOutput = @(smbclient $sharePath -g -k -c 'ls' 2>&1)
+                        $exitCode = [int]$LASTEXITCODE
+                    } elseif ($profileContext.mode -eq 'kerberosKeytab') {
+                        $credentialCacheDirectory = Split-Path -Path $profileContext.ccachePath -Parent
+                        if (-not [string]::IsNullOrWhiteSpace($credentialCacheDirectory)) {
+                            [void](New-Item -Path $credentialCacheDirectory -ItemType Directory -Force)
+                        }
+
+                        $env:KRB5CCNAME = $profileContext.ccachePath
+                        $null = @(kinit -k -t $profileContext.keytabPath $profileContext.principal 2>&1)
+                        if ([int]$LASTEXITCODE -ne 0) {
+                            return @{
+                                result = 'FAILURE'
+                                errorCode = 'LinuxKerberosAcquireFailed'
+                                details = 'Kerberos ticket acquisition failed for the Linux share probe.'
+                            }
+                        }
+
+                        $commandOutput = @(smbclient $sharePath -g -k -c 'ls' 2>&1)
+                        $exitCode = [int]$LASTEXITCODE
+                    } elseif ($profileContext.mode -eq 'usernamePassword') {
+                        $tempAuthPath = [System.IO.Path]::GetTempFileName()
+                        try {
+                            $authLines = New-Object System.Collections.Generic.List[string]
+                            if (-not [string]::IsNullOrWhiteSpace($profileContext.domain)) {
+                                $authLines.Add(('domain = {0}' -f $profileContext.domain)) | Out-Null
+                            }
+
+                            $authLines.Add(('username = {0}' -f $profileContext.username)) | Out-Null
+                            $authLines.Add(('password = {0}' -f $profileContext.password)) | Out-Null
+                            Set-Content -LiteralPath $tempAuthPath -Value $authLines.ToArray() -Encoding Ascii
+
+                            if (Get-Command -Name chmod -ErrorAction SilentlyContinue) {
+                                chmod 600 $tempAuthPath 2>&1 | Out-Null
+                            }
+
+                            $commandOutput = @(smbclient $sharePath -g -A $tempAuthPath -c 'ls' 2>&1)
+                            $exitCode = [int]$LASTEXITCODE
+                        } finally {
+                            Remove-Item -LiteralPath $tempAuthPath -Force -ErrorAction SilentlyContinue
+                        }
+                    } else {
+                        return @{
+                            result = 'FAILURE'
+                            errorCode = 'LinuxAuthModeUnsupported'
+                            details = 'Linux share probe profile mode is not supported.'
+                        }
                     }
 
-                    smbclient $args[0] -g -k -c 'ls' 2>&1
-                } -ArgumentList $linuxSharePath, $Config.auth.linuxSmbMode
+                    if ($exitCode -ne 0) {
+                        return @{
+                            result = 'FAILURE'
+                            errorCode = 'LinuxShareAccessFailed'
+                            details = ('smbclient returned exit code {0}.' -f $exitCode)
+                        }
+                    }
+
+                    return @{
+                        result = if ($null -eq $commandOutput -or [string]::IsNullOrWhiteSpace(($commandOutput | Out-String).Trim())) { 'EMPTY' } else { 'SUCCESS' }
+                        details = if ($null -eq $commandOutput -or [string]::IsNullOrWhiteSpace(($commandOutput | Out-String).Trim())) { 'Share probe succeeded but returned no visible items.' } else { 'Share access confirmed.' }
+                        errorCode = $null
+                    }
+                } -ArgumentList $linuxSharePath, $linuxProfileContext
             }
 
             if (-not (Wait-Job -Job $jobValue -Timeout ([int]$Config.tests.shareAccessTimeoutSeconds))) {
@@ -1681,33 +2316,33 @@ function Test-PSConnMonShare {
                         -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'share' -ProbeName 'Share.Access' `
                         -Result 'TIMEOUT' -ErrorCode 'ShareTimeout' `
                         -Details ('Share probe exceeded {0} seconds.' -f $Config.tests.shareAccessTimeoutSeconds) `
-                        -Metadata @{ shareId = $shareValue.id; sharePath = $shareValue.path })
+                        -Metadata $metadataValue)
                 ) | Out-Null
                 continue
             }
 
             $jobOutput = Receive-Job -Job $jobValue -Wait -ErrorAction Stop
-            if ($null -eq $jobOutput) {
-                $eventValues.Add(
-                    (Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
-                        -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'share' -ProbeName 'Share.Access' `
-                        -Result 'EMPTY' -Details 'Share probe succeeded but returned no visible items.' `
-                        -Metadata @{ shareId = $shareValue.id; sharePath = $shareValue.path })
-                ) | Out-Null
-            } else {
-                $eventValues.Add(
-                    (Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
-                        -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'share' -ProbeName 'Share.Access' `
-                        -Result 'SUCCESS' -Details 'Share access confirmed.' `
-                        -Metadata @{ shareId = $shareValue.id; sharePath = $shareValue.path })
-                ) | Out-Null
+            if (-not ($jobOutput -is [System.Collections.IDictionary])) {
+                throw (New-PSConnMonProbeException -ErrorCode 'ShareProbeFailure' -Message 'Share probe returned an unexpected result payload.')
             }
-        } catch {
+
             $eventValues.Add(
                 (Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
                     -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'share' -ProbeName 'Share.Access' `
-                    -Result 'FATAL' -ErrorCode 'ShareProbeFailure' -Details $_.Exception.Message `
-                    -Metadata @{ shareId = $shareValue.id; sharePath = $shareValue.path })
+                    -Result ([string]$jobOutput.result) -ErrorCode ([string]$jobOutput.errorCode) -Details ([string]$jobOutput.details) `
+                    -Metadata $metadataValue)
+            ) | Out-Null
+        } catch {
+            $errorCode = if ($_.Exception.Data.Contains('PSConnMonErrorCode')) {
+                [string]$_.Exception.Data['PSConnMonErrorCode']
+            } else {
+                'ShareProbeFailure'
+            }
+            $eventValues.Add(
+                (Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
+                    -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'share' -ProbeName 'Share.Access' `
+                    -Result 'FATAL' -ErrorCode $errorCode -Details $_.Exception.Message `
+                    -Metadata $metadataValue)
             ) | Out-Null
         } finally {
             if ($null -ne $jobValue) {
@@ -1718,6 +2353,183 @@ function Test-PSConnMonShare {
     }
 
     return $eventValues.ToArray()
+}
+
+function Test-PSConnMonDomainAuth {
+    # .SYNOPSIS
+    # Validates Linux Kerberos auth health for one target.
+    #
+    # .DESCRIPTION
+    # Confirms that a Linux collector can use its effective Kerberos-backed auth
+    # profile for one target. Current-context probes validate the active ticket
+    # cache, while keytab-backed profiles acquire and validate a ticket. Explicit
+    # username/password profiles remain SMB-only and are skipped.
+    #
+    # .PARAMETER Target
+    # The target definition.
+    #
+    # .PARAMETER Config
+    # The normalized PSConnMon configuration.
+    #
+    # .EXAMPLE
+    # Test-PSConnMonDomainAuth -Target $config.targets[0] -Config $config
+    #
+    # .INPUTS
+    # None. You can't pipe objects to Test-PSConnMonDomainAuth.
+    #
+    # .OUTPUTS
+    # System.Object[]. Domain auth probe events.
+    #
+    # .NOTES
+    # Version: 0.3.20260412.0
+
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Target,
+        [Parameter(Mandatory = $true)][hashtable]$Config
+    )
+
+    Assert-PSConnMonDependency -DependencyName 'ThreadJob' -DependencyType 'Module'
+
+    if ($script:PSConnMonIsWindows) {
+        return @(
+            Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
+                -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'domainAuth' -ProbeName 'DomainAuth.Kerberos' `
+                -Result 'SKIPPED' -ErrorCode 'DomainAuthUnsupportedPlatform' `
+                -Details 'domainAuth is supported on Linux collectors only.'
+        )
+    }
+
+    $jobValue = $null
+    $metadataValue = @{}
+    try {
+        $linuxProfileContext = Resolve-PSConnMonLinuxAuthProfileContext -Config $Config -Target $Target
+        if (-not [string]::IsNullOrWhiteSpace($linuxProfileContext.id)) {
+            $metadataValue.linuxProfileId = $linuxProfileContext.id
+        }
+
+        if ($linuxProfileContext.mode -eq 'usernamePassword') {
+            return @(
+                Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
+                    -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'domainAuth' -ProbeName 'DomainAuth.Kerberos' `
+                    -Result 'SKIPPED' -ErrorCode 'DomainAuthUnsupportedProfileMode' `
+                    -Details 'domainAuth requires currentContext or kerberosKeytab Linux auth.' `
+                    -Metadata $metadataValue
+            )
+        }
+
+        if (-not (Get-Command -Name klist -ErrorAction SilentlyContinue)) {
+            return @(
+                Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
+                    -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'domainAuth' -ProbeName 'DomainAuth.Kerberos' `
+                    -Result 'SKIPPED' -ErrorCode 'LinuxKlistMissing' `
+                    -Details 'klist is required for Linux domainAuth probes.' `
+                    -Metadata $metadataValue
+            )
+        }
+
+        if (($linuxProfileContext.mode -eq 'kerberosKeytab') -and (-not (Get-Command -Name kinit -ErrorAction SilentlyContinue))) {
+            return @(
+                Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
+                    -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'domainAuth' -ProbeName 'DomainAuth.Kerberos' `
+                    -Result 'SKIPPED' -ErrorCode 'LinuxKinitMissing' `
+                    -Details 'kinit is required for keytab-backed Linux domainAuth probes.' `
+                    -Metadata $metadataValue
+            )
+        }
+
+        $jobValue = Start-ThreadJob -ScriptBlock {
+            $profileContext = $args[0]
+
+            if ($profileContext.mode -eq 'currentContext') {
+                $null = @(klist -s 2>&1)
+                if ([int]$LASTEXITCODE -eq 0) {
+                    return @{
+                        result = 'SUCCESS'
+                        errorCode = $null
+                        details = 'Kerberos ticket cache is available in the current Linux context.'
+                    }
+                }
+
+                return @{
+                    result = 'FAILURE'
+                    errorCode = 'LinuxKerberosTicketMissing'
+                    details = 'Kerberos ticket cache validation failed for the current Linux context.'
+                }
+            }
+
+            $credentialCacheDirectory = Split-Path -Path $profileContext.ccachePath -Parent
+            if (-not [string]::IsNullOrWhiteSpace($credentialCacheDirectory)) {
+                [void](New-Item -Path $credentialCacheDirectory -ItemType Directory -Force)
+            }
+
+            $env:KRB5CCNAME = $profileContext.ccachePath
+            $null = @(kinit -k -t $profileContext.keytabPath $profileContext.principal 2>&1)
+            if ([int]$LASTEXITCODE -ne 0) {
+                return @{
+                    result = 'FAILURE'
+                    errorCode = 'LinuxKerberosAcquireFailed'
+                    details = 'Kerberos ticket acquisition failed for the Linux domainAuth probe.'
+                }
+            }
+
+            $null = @(klist -s 2>&1)
+            if ([int]$LASTEXITCODE -ne 0) {
+                return @{
+                    result = 'FAILURE'
+                    errorCode = 'LinuxKerberosTicketMissing'
+                    details = 'Kerberos ticket cache validation failed after keytab acquisition.'
+                }
+            }
+
+            return @{
+                result = 'SUCCESS'
+                errorCode = $null
+                details = 'Kerberos ticket acquisition and validation succeeded.'
+            }
+        } -ArgumentList $linuxProfileContext
+
+        if (-not (Wait-Job -Job $jobValue -Timeout ([int]$Config.tests.shareAccessTimeoutSeconds))) {
+            return @(
+                Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
+                    -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'domainAuth' -ProbeName 'DomainAuth.Kerberos' `
+                    -Result 'TIMEOUT' -ErrorCode 'DomainAuthTimeout' `
+                    -Details ('domainAuth probe exceeded {0} seconds.' -f $Config.tests.shareAccessTimeoutSeconds) `
+                    -Metadata $metadataValue
+            )
+        }
+
+        $jobOutput = Receive-Job -Job $jobValue -Wait -ErrorAction Stop
+        if (-not ($jobOutput -is [System.Collections.IDictionary])) {
+            throw (New-PSConnMonProbeException -ErrorCode 'DomainAuthProbeFailure' -Message 'domainAuth probe returned an unexpected result payload.')
+        }
+
+        return @(
+            Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
+                -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'domainAuth' -ProbeName 'DomainAuth.Kerberos' `
+                -Result ([string]$jobOutput.result) -ErrorCode ([string]$jobOutput.errorCode) -Details ([string]$jobOutput.details) `
+                -Metadata $metadataValue
+        )
+    } catch {
+        $errorCode = if ($_.Exception.Data.Contains('PSConnMonErrorCode')) {
+            [string]$_.Exception.Data['PSConnMonErrorCode']
+        } else {
+            'DomainAuthProbeFailure'
+        }
+
+        return @(
+            Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
+                -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'domainAuth' -ProbeName 'DomainAuth.Kerberos' `
+                -Result 'FATAL' -ErrorCode $errorCode -Details $_.Exception.Message `
+                -Metadata $metadataValue
+        )
+    } finally {
+        if ($null -ne $jobValue) {
+            Stop-Job -Job $jobValue -ErrorAction SilentlyContinue
+            Remove-Job -Job $jobValue -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Test-PSConnMonInternetQuality {
@@ -1920,6 +2732,7 @@ function Start-PSConnMonCycle {
                 'ping' { @(Test-PSConnMonPing -Target $targetValue -Config $Config) }
                 'dns' { @(Test-PSConnMonDnsQuery -Target $targetValue -Config $Config) }
                 'share' { @(Test-PSConnMonShare -Target $targetValue -Config $Config) }
+                'domainAuth' { @(Test-PSConnMonDomainAuth -Target $targetValue -Config $Config) }
                 'internetQuality' { @(Test-PSConnMonInternetQuality -Target $targetValue -Config $Config) }
                 'traceroute' { @(Test-PSConnMonTraceroute -Target $targetValue -Config $Config) }
                 default {
@@ -2272,6 +3085,7 @@ Export-ModuleMember -Function @(
     'Start-PSConnMonCycle',
     'Test-PSConnMonConfig',
     'Test-PSConnMonDnsQuery',
+    'Test-PSConnMonDomainAuth',
     'Test-PSConnMonInternetQuality',
     'Test-PSConnMonPing',
     'Test-PSConnMonShare',

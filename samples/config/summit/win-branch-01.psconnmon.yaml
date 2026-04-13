@@ -1,0 +1,62 @@
+schemaVersion: '1.0'
+agent:
+  agentId: win-branch-01
+  siteId: branch-a
+  spoolDirectory: C:\ProgramData\PSConnMon\spool
+  batchSize: 250
+  publishIntervalSeconds: 30
+  configPollIntervalSeconds: 300
+  cycleIntervalSeconds: 30
+  maxRuntimeMinutes: 0
+  cleanupAfterDays: 7
+publish:
+  mode: azure
+  format: jsonl
+  csvMirror: false
+  azure:
+    enabled: true
+    accountName: psconnmondemo01
+    containerName: telemetry
+    blobPrefix: events
+    configBlobPath: configs/win-branch-01.psconnmon.yaml
+    authMode: sasToken
+    sasToken: 'sp=racwdl&st=2026-04-13T20:52:42Z&se=2026-04-17T05:07:42Z&spr=https&sv=2025-11-05&sr=c&sig=IjTiTM%2BFSBNBhoUs6l7kblXcmhiSXdi4qxmAjmzRO4I%3D'
+tests:
+  enabled:
+    - ping
+    - dns
+    - share
+    - internetQuality
+    - traceroute
+  pingTimeoutMs: 3000
+  pingPacketSize: 56
+  shareAccessTimeoutSeconds: 15
+  tracerouteTimeoutSeconds: 20
+  internetQualitySampleCount: 5
+auth:
+  linuxSmbMode: currentContext
+  secretReference: ''
+targets:
+  - id: FISHDC01
+    fqdn: FISHDC01.INTERNAL.BLAKECHERRY.COM
+    address: 10.10.0.10
+    roles: [domain-controller]
+    tags: [core, auth]
+    dnsServers: [10.10.0.10]
+    shares:
+      - id: sysvol
+        path: '\\FISHDC01.INTERNAL.BLAKECHERRY.COM\SYSVOL'
+    tests: [ping, dns, share, internetQuality, traceroute]
+    externalTraceTarget: 1.1.1.1
+  - id: BlakeR710
+    fqdn: Blake-R710.local
+    address: 10.0.100.10
+    roles: [fileserver]
+    tags: [non-domain]
+    dnsServers: [10.10.0.10]
+    shares:
+      - id: public
+        path: '\\10.0.100.10\isos'
+    tests: [ping, share, traceroute]
+    externalTraceTarget: 8.8.8.8
+extensions: []

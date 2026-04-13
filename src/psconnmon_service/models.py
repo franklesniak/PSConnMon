@@ -108,6 +108,7 @@ class FleetSummary(CompatBaseModel):
     """Aggregated service-level summary for dashboard rendering."""
 
     total_events: int
+    total_agents: int
     total_targets: int
     active_sites: int
     failure_events: int
@@ -119,9 +120,12 @@ class TargetSummary(CompatBaseModel):
     """Aggregated state for one target."""
 
     target_id: str
+    agent_id: str
     fqdn: str
     site_id: str
+    target_address: str
     latest_result: str
+    last_test_type: str
     last_latency_ms: float | None
     last_timestamp_utc: datetime | None
 
@@ -147,6 +151,61 @@ class IncidentSummary(CompatBaseModel):
     error_code: str | None
     details: str
     timestamp_utc: datetime
+
+
+class AgentSummary(CompatBaseModel):
+    """Current reporting state for one deployed agent."""
+
+    agent_id: str
+    site_id: str
+    total_targets: int
+    healthy_targets: int
+    failing_targets: int
+    timeout_targets: int
+    average_latency_ms: float | None
+    last_timestamp_utc: datetime | None
+
+
+class SiteSummary(CompatBaseModel):
+    """Aggregated current state for one site."""
+
+    site_id: str
+    agent_count: int
+    target_count: int
+    failing_targets: int
+    average_latency_ms: float | None
+    last_timestamp_utc: datetime | None
+
+
+class LatencyPoint(CompatBaseModel):
+    """One point in a target latency timeline."""
+
+    timestamp_utc: datetime
+    latency_ms: float | None
+    result: str
+    test_type: str
+
+
+class PathChangeSummary(CompatBaseModel):
+    """A detected traceroute path transition for one target."""
+
+    target_id: str
+    fqdn: str
+    site_id: str
+    agent_id: str
+    previous_path_hash: str
+    path_hash: str
+    hop_count: int
+    timestamp_utc: datetime
+
+
+class TargetDetail(CompatBaseModel):
+    """Detailed drilldown payload for one target."""
+
+    target: TargetSummary
+    latency_series: list[LatencyPoint]
+    incidents: list[IncidentSummary]
+    paths: list[PathSummary]
 
 
 class ImportSourceStatus(CompatBaseModel):
@@ -181,3 +240,17 @@ class ImportStatus(CompatBaseModel):
     skipped: int
     failed: int
     sources: list[ImportSourceStatus]
+
+
+class DashboardSnapshot(CompatBaseModel):
+    """Single payload used by the live dashboard client."""
+
+    summary: FleetSummary
+    agents: list[AgentSummary]
+    sites: list[SiteSummary]
+    targets: list[TargetSummary]
+    paths: list[PathSummary]
+    path_changes: list[PathChangeSummary]
+    incidents: list[IncidentSummary]
+    import_status: ImportStatus = Field(alias="importStatus")
+    refreshed_utc: datetime = Field(alias="refreshedUtc")

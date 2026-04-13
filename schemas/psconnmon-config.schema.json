@@ -23,14 +23,100 @@
     },
     "auth": {
       "type": "object",
-      "required": ["linuxSmbMode", "secretReference"]
+      "required": ["linuxSmbMode", "secretReference"],
+      "properties": {
+        "linuxSmbMode": {
+          "type": "string"
+        },
+        "secretReference": {
+          "type": "string"
+        },
+        "linuxProfiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "mode", "secretReference"],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["currentContext", "kerberosKeytab", "usernamePassword"]
+              },
+              "secretReference": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
     },
     "targets": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "fqdn", "address", "roles", "tags", "dnsServers", "shares", "tests", "externalTraceTarget"]
+        "required": ["id", "fqdn", "address", "roles", "tags", "dnsServers", "shares", "tests", "externalTraceTarget"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "fqdn": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dnsServers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "shares": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "path"],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "linuxProfileId": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "externalTraceTarget": {
+            "type": "string"
+          },
+          "linuxProfileId": {
+            "type": "string"
+          }
+        }
       }
     },
     "extensions": {

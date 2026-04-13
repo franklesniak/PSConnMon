@@ -64,13 +64,28 @@ def test_dashboard_and_import_endpoints(tmp_path: Path) -> None:
         assert status_response.json()["imported"] == 1
         assert status_response.json()["sources"][0]["source_type"] == "local"
 
+        dashboard_data_response = client.get("/api/v1/dashboard")
+        assert dashboard_data_response.status_code == 200
+        assert dashboard_data_response.json()["summary"]["total_agents"] == 1
+        assert dashboard_data_response.json()["agents"][0]["agent_id"] == "branch-01"
+
         dashboard_response = client.get("/")
         assert dashboard_response.status_code == 200
-        assert "Import Health" in dashboard_response.text
+        assert "Agent Fleet" in dashboard_response.text
+        assert "Target Explorer" in dashboard_response.text
+
+        agents_response = client.get("/api/v1/agents")
+        assert agents_response.status_code == 200
+        assert agents_response.json()[0]["agent_id"] == "branch-01"
 
         targets_response = client.get("/api/v1/targets")
         assert targets_response.status_code == 200
         assert targets_response.json()[0]["fqdn"] == "fs01.corp.local"
+        assert targets_response.json()[0]["agent_id"] == "branch-01"
+
+        target_detail_response = client.get("/api/v1/targets/fs01")
+        assert target_detail_response.status_code == 200
+        assert target_detail_response.json()["target"]["fqdn"] == "fs01.corp.local"
 
 
 def test_http_ingest_remains_available(tmp_path: Path) -> None:
@@ -125,3 +140,61 @@ def test_http_ingest_remains_available(tmp_path: Path) -> None:
         summary_response = client.get("/api/v1/summary")
         assert summary_response.status_code == 200
         assert summary_response.json()["total_events"] == 1
+
+
+def test_domain_auth_events_surface_without_special_casing(tmp_path: Path) -> None:
+    """Domain auth events should ingest and surface through the target APIs."""
+
+    settings = ServiceSettings(
+        database_path=tmp_path / "psconnmon.duckdb",
+        import_mode="disabled",
+        import_interval_seconds=30,
+        import_local_path=tmp_path / "import",
+        azure_storage_account="",
+        azure_storage_container="",
+        azure_blob_prefix="events",
+        azure_auth_mode="managedIdentity",
+        azure_sas_token="",
+        azure_blob_service_url="",
+    )
+
+    app = create_app(settings=settings)
+    payload = {
+        "events": [
+            {
+                "timestampUtc": "2026-04-09T12:05:00Z",
+                "agentId": "pi-branch-01",
+                "siteId": "site-a",
+                "targetId": "dc01",
+                "fqdn": "dc01.corp.local",
+                "targetAddress": "10.10.0.10",
+                "testType": "domainAuth",
+                "probeName": "DomainAuth.Kerberos",
+                "result": "SUCCESS",
+                "latencyMs": None,
+                "loss": None,
+                "errorCode": None,
+                "details": "Kerberos ticket acquisition and validation succeeded.",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {"linuxProfileId": "dc-keytab"},
+            }
+        ]
+    }
+
+    with TestClient(app) as client:
+        ingest_response = client.post("/api/v1/ingest/batches", json=payload)
+        assert ingest_response.status_code == 200
+        assert ingest_response.json()["inserted"] == 1
+
+        targets_response = client.get("/api/v1/targets")
+        assert targets_response.status_code == 200
+        assert targets_response.json()[0]["last_test_type"] == "domainAuth"
+
+        target_detail_response = client.get("/api/v1/targets/dc01")
+        assert target_detail_response.status_code == 200
+        assert target_detail_response.json()["target"]["last_test_type"] == "domainAuth"

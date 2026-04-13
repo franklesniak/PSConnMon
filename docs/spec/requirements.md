@@ -52,8 +52,8 @@ normalized result states.
 ### PSCONNMON-REQ-004
 
 The system **MUST** support cross-platform ICMP, DNS, internet-quality, and
-traceroute probes, and **SHOULD** attempt Linux share probing using supported
-native tooling.
+traceroute probes, Linux credentialed SMB probing, and a Linux Kerberos
+auth-health probe using supported native tooling.
 
 - **Rationale:** Windows and Linux are both first-class target platforms.
 - **Roadmap Mapping:** `Multi-Platform Support`, `Authentication Testing`,
@@ -116,12 +116,13 @@ NOT** execute.
 
 ### PSCONNMON-REQ-010
 
-Built-in Linux SMB probing **MUST** remain `currentContext` only in v1.
-Credential-backed Linux parity is deferred until a secure storage strategy is
-approved.
+Built-in Linux SMB probing **MUST** support `currentContext`,
+`kerberosKeytab`, and `usernamePassword` auth profiles. Secret-backed Linux
+profiles **MUST** resolve from trusted local JSON files only, and
+`usernamePassword` profiles **MUST** remain SMB-only in v1.
 
-- **Rationale:** Linux SMB parity is operationally useful, but secure
-  credentialed passthrough requires a separate decision on secret handling.
+- **Rationale:** Linux SMB parity is operationally useful, but credentialed
+  probing must keep the trust boundary explicit and local to the collector.
 - **Roadmap Mapping:** `Authentication Testing`
 - **Verification:** Documentation review, Linux integration tests, and explicit
   negative-path coverage.

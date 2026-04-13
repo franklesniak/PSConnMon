@@ -31,7 +31,10 @@ path visualization, and centralized views.
 - **DNS Lookups** — Queries via configured DNS servers or the local primary DNS
   server
 - **SMB Share Probes** — Lightweight share accessibility tests with bounded
-  timeouts
+  timeouts, including Linux `currentContext`, keytab-backed Kerberos, and
+  explicit credential-file modes
+- **Domain Auth Health** — Optional Linux Kerberos ticket validation for domain
+  infrastructure targets
 - **Traceroute / Path Tracking** — Hop-by-hop path capture for route-change and
   latency analysis
 - **Structured Batch Logging** — JSONL spool files for local retention, replay,
@@ -55,7 +58,7 @@ path visualization, and centralized views.
 | **OS** | Windows, macOS, and Linux |
 | **Module** | [ThreadJob](https://www.powershellgallery.com/packages/ThreadJob) |
 | **Optional YAML** | `ConvertFrom-Yaml` / `ConvertTo-Yaml` support for YAML config files |
-| **Optional Linux tools** | `smbclient`, `traceroute`, `dig` or `nslookup` |
+| **Optional Linux tools** | `smbclient`, `traceroute`, `dig` or `nslookup`, `kinit`, `klist` |
 | **Optional reporting service** | Python 3.13 for the FastAPI dashboard |
 
 Install the required PowerShell module:
@@ -157,6 +160,7 @@ the file-based config:
 | `tests` | No | Enabled tests for the target |
 | `dnsServers` | No | DNS servers to query for DNS probes |
 | `shares` | No | Share definitions with `id` and `path` |
+| `linuxProfileId` | No | Default Linux auth profile id for target-scoped SMB and `domainAuth` probes |
 | `roles` | No | Informational target roles |
 | `tags` | No | Informational tags |
 | `externalTraceTarget` | No | Address used for internet-quality and traceroute probes |
@@ -168,7 +172,7 @@ Top-level object parameters align to the same config sections:
 | `-Agent` | Monitor identity, spool path, intervals, and runtime settings |
 | `-Publish` | Local/Azure publish behavior and CSV mirror settings |
 | `-Tests` | Global probe settings such as timeouts and sample counts |
-| `-Auth` | Authentication-related options such as Linux SMB mode |
+| `-Auth` | Authentication-related options such as Linux SMB profiles |
 | `-Extensions` | Trusted local extension probes referenced by file path |
 
 ### File Config Options
@@ -187,13 +191,34 @@ The current file/object configuration model supports these main option groups:
 - `tests.enabled`, `tests.pingTimeoutMs`, `tests.pingPacketSize`,
   `tests.shareAccessTimeoutSeconds`, `tests.tracerouteTimeoutSeconds`,
   `tests.internetQualitySampleCount`
-- `auth.linuxSmbMode`, `auth.secretReference`
+- `auth.linuxSmbMode`, `auth.secretReference`, `auth.linuxProfiles[].id`,
+  `auth.linuxProfiles[].mode`, `auth.linuxProfiles[].secretReference`
+- `targets[].linuxProfileId`, `targets[].shares[].linuxProfileId`
 - `extensions[].id`, `extensions[].path`, `extensions[].entryPoint`,
   `extensions[].enabled`, `extensions[].targets`
 
-`auth.secretReference` is reserved for future credential-backed probes and does
-not power built-in Linux SMB probing in v1. Built-in Linux SMB remains
-`currentContext` only.
+`tests.enabled` and `targets[].tests` may include the built-in `domainAuth`
+probe. It validates Linux Kerberos auth health for the target's effective Linux
+auth profile. `domainAuth` is meaningful only for Linux collectors.
+
+`auth.linuxProfiles[]` supports these Linux auth modes:
+
+- `currentContext` for an existing Kerberos context on the host
+- `kerberosKeytab` for keytab-backed Kerberos acquisition
+- `usernamePassword` for SMB-only explicit credential fallback
+
+`auth.linuxProfiles[].secretReference` must point to a local JSON file under the
+config directory or `<spoolDirectory>/secrets`. Secret files are local-only
+inputs and are not intended to be delivered inline through YAML, JSON, or
+Azure-hosted config blobs.
+
+Built-in Linux secret-file contracts are:
+
+- `kerberosKeytab`: `principal`, `keytabPath`, optional `ccachePath`
+- `usernamePassword`: `username`, `password`, optional `domain`
+
+`auth.secretReference` remains a legacy field for older configs. New Linux
+credentialed SMB and `domainAuth` workflows should use `auth.linuxProfiles[]`.
 
 ### Extension Contract
 
@@ -245,14 +270,27 @@ Traceroute events also include hop-level fields such as `hopIndex`,
 The optional reporting service is a small FastAPI application backed by DuckDB.
 It provides:
 
+- `GET /api/v1/dashboard`
+- `GET /api/v1/agents`
+- `GET /api/v1/sites`
 - `POST /api/v1/import/run`
 - `GET /api/v1/import/status`
 - `POST /api/v1/ingest/batches`
 - `GET /api/v1/summary`
 - `GET /api/v1/targets`
+- `GET /api/v1/targets/{targetId}`
 - `GET /api/v1/paths`
+- `GET /api/v1/path-changes`
 - `GET /api/v1/incidents`
 - `GET /` for the built-in dashboard
+
+The built-in dashboard is now a live operator board with:
+
+- auto-refreshing fleet and import status
+- agent-centric reporting cards that show deployment freshness and target health
+- site, agent, status, and search filtering
+- clickable target drilldowns with latency history and recent incidents
+- traceroute path-change inventory for routing drift review
 
 ### Service Configuration
 

@@ -14,6 +14,7 @@
         'Start-PSConnMonCycle',
         'Test-PSConnMonConfig',
         'Test-PSConnMonDnsQuery',
+        'Test-PSConnMonDomainAuth',
         'Test-PSConnMonInternetQuality',
         'Test-PSConnMonPing',
         'Test-PSConnMonShare',

@@ -17,7 +17,8 @@ script provided useful probes but not a durable product boundary.
 ## System Overview
 
 - **PowerShell monitor:** Reads YAML or JSON config, runs probe cycles, writes JSONL batch
-  files, optionally mirrors CSV, and can poll Azure Storage for updated config.
+  files, optionally mirrors CSV, can resolve trusted local Linux SMB secret
+  files, and can poll Azure Storage for updated config.
 - **Python reporting service:** Imports batches from local storage and Azure
   Blob Storage, stores hot data in DuckDB, and renders the built-in dashboard
   and APIs.
@@ -67,6 +68,8 @@ flowchart LR
   quality probes.
 - Missing Linux dependencies **MUST** emit `SKIPPED` events rather than crash
   the cycle.
+- Linux secret and keytab paths **MUST** stay under the config directory or the
+  monitor spool secrets directory.
 - Azure config poll failures **MUST** keep the last-known-good config active.
 - Azure upload failures **MUST** retain pending batches locally for retry.
 - Import failures **MUST** be recorded in DuckDB without partially committing an
@@ -76,8 +79,8 @@ flowchart LR
 
 ## Open Questions
 
-- Linux SMB parity may still require environment-specific validation for domain
-  join and Kerberos behavior.
+- Linux Kerberos behavior may still require environment-specific validation for
+  domain join, keytab lifecycle, and distro-specific `smbclient` behavior.
 - The current Azure upload path supports managed identity and SAS; service
   principals and connection strings are intentionally deferred until there is a
   concrete operational requirement.

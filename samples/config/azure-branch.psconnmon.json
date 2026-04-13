@@ -41,7 +41,8 @@
   },
   "auth": {
     "linuxSmbMode": "currentContext",
-    "secretReference": ""
+    "secretReference": "",
+    "linuxProfiles": []
   },
   "targets": [
     {
