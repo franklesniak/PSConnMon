@@ -2132,10 +2132,22 @@ function Test-PSConnMonDnsQuery {
     foreach ($dnsServer in $dnsServers) {
         try {
             $resolvedAddress = ''
+            $failureDetails = 'DNS query returned no address.'
             if (($script:PSConnMonIsWindows) -and (Get-Command -Name Resolve-DnsName -ErrorAction SilentlyContinue) -and ($dnsServer -ne 'system-default')) {
                 $resolvedAddress = (Resolve-DnsName -Name $Target.fqdn -Server $dnsServer -Type A -DnsOnly | Select-Object -First 1 -ExpandProperty IPAddress)
             } elseif ((Get-Command -Name dig -ErrorAction SilentlyContinue) -and ($dnsServer -ne 'system-default')) {
-                $resolvedAddress = (dig +short "@$dnsServer" $Target.fqdn | Select-Object -First 1).Trim()
+                $digOutput = @(dig +short "@$dnsServer" $Target.fqdn 2>&1)
+                $digLines = @($digOutput | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+                $resolvedAddress = @(
+                    $digLines |
+                        ForEach-Object { $_.Trim() } |
+                        Where-Object { $_ -match '^(\d{1,3}(\.\d{1,3}){3}|[0-9A-Fa-f:]+)$' } |
+                        Select-Object -First 1
+                ) -join ''
+
+                if ([string]::IsNullOrWhiteSpace($resolvedAddress) -and ($digLines.Count -gt 0)) {
+                    $failureDetails = ($digLines -join [System.Environment]::NewLine)
+                }
             } elseif (Get-Command -Name nslookup -ErrorAction SilentlyContinue) {
                 $nslookupOutput = if ($dnsServer -eq 'system-default') {
                     nslookup $Target.fqdn 2>&1
@@ -2151,7 +2163,7 @@ function Test-PSConnMonDnsQuery {
                 $eventValues.Add(
                     (Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
                         -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'dns' -ProbeName 'DNS.Lookup' `
-                        -Result 'FAILURE' -DnsServer $dnsServer -ErrorCode 'NoAddress' -Details 'DNS query returned no address.')
+                        -Result 'FAILURE' -DnsServer $dnsServer -ErrorCode 'NoAddress' -Details $failureDetails)
                 ) | Out-Null
             } else {
                 $eventValues.Add(

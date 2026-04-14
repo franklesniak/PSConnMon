@@ -969,6 +969,38 @@ Describe 'Linux share and domain auth probes' {
         }
     }
 
+    It 'Treats Linux dig timeout output as a DNS failure instead of a success' {
+        $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
+        [void](New-Item -Path $tempRoot -ItemType Directory -Force)
+        $config = New-PSConnMonTestConfig -TempRoot $tempRoot -EnabledTests @('dns')
+        $config.targets[0].fqdn = 'dc01.corp.local'
+        $config.targets[0].dnsServers = @('10.10.0.10')
+
+        InModuleScope PSConnMon -Parameters @{ ConfigValue = $config } {
+            param($ConfigValue)
+            $originalIsWindows = $script:PSConnMonIsWindows
+            try {
+                $script:PSConnMonIsWindows = $false
+
+                Mock -ModuleName PSConnMon Get-Command {
+                    [pscustomobject]@{ Name = $Name }
+                } -ParameterFilter { $Name -eq 'dig' }
+                Mock -ModuleName PSConnMon dig {
+                    @(';; communications error to 10.10.0.10#53: timed out')
+                }
+
+                $events = @(Test-PSConnMonDnsQuery -Target $ConfigValue.targets[0] -Config $ConfigValue)
+
+                $events.Count | Should -Be 1
+                $events[0].result | Should -Be 'FAILURE'
+                $events[0].errorCode | Should -Be 'NoAddress'
+                $events[0].details | Should -Match 'communications error'
+            } finally {
+                $script:PSConnMonIsWindows = $originalIsWindows
+            }
+        }
+    }
+
     It 'Continues the cycle when a share probe fails alongside another probe' {
         $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
         [void](New-Item -Path $tempRoot -ItemType Directory -Force)
