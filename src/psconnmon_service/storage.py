@@ -322,10 +322,10 @@ class StorageRepository:
                 default=None,
             ),
             last_error=latest_error_source.last_error if latest_error_source else None,
-            discovered=sum(source.cumulative_discovered for source in sources),
-            imported=sum(source.cumulative_imported for source in sources),
-            skipped=sum(source.cumulative_skipped for source in sources),
-            failed=sum(source.cumulative_failed for source in sources),
+            cumulative_discovered=sum(source.cumulative_discovered for source in sources),
+            cumulative_imported=sum(source.cumulative_imported for source in sources),
+            cumulative_skipped=sum(source.cumulative_skipped for source in sources),
+            cumulative_failed=sum(source.cumulative_failed for source in sources),
             sources=sources,
         )
 

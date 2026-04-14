@@ -73,7 +73,7 @@ def test_storage_tracks_import_source_status(tmp_path: Path) -> None:
     status = repository.get_import_status("local")
 
     assert status.mode == "local"
-    assert status.imported == 2
+    assert status.cumulative_imported == 2
     assert status.sources[0].source_type == "local"
     assert status.sources[0].cumulative_skipped == 1
 

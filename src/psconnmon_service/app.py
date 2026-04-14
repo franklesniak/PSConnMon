@@ -55,12 +55,18 @@ def create_app(
     def resolve_window_minutes(
         summary_window_minutes: int | None, summary_window_hours: int | None
     ) -> int | None:
-        """Prefer explicit minute windows while preserving hour-based compatibility."""
+        """Prefer explicit minute windows while preserving hour-based compatibility.
+
+        Returns ``None`` only when the caller explicitly requests an unbounded
+        window by passing ``0`` for either parameter.  When both parameters are
+        ``None`` (omitted), the default 24-hour window is applied.
+        """
 
         if summary_window_minutes is not None:
-            return summary_window_minutes or None
+            return summary_window_minutes if summary_window_minutes > 0 else None
         if summary_window_hours is not None:
-            return (summary_window_hours * 60) or None
+            converted = summary_window_hours * 60
+            return converted if converted > 0 else None
         return 24 * 60
 
     def build_dashboard_snapshot(summary_window_minutes: int | None = 24 * 60) -> DashboardSnapshot:

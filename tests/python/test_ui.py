@@ -9,6 +9,7 @@ from psconnmon_service.models import (
     DashboardSnapshot,
     FleetSummary,
     ImportStatus,
+    IncidentSummary,
     PathSummary,
     SiteSummary,
     TargetSummary,
@@ -91,10 +92,10 @@ def test_dashboard_renders_live_board_shell() -> None:
                 last_run_utc=datetime.now(timezone.utc),
                 last_success_utc=datetime.now(timezone.utc),
                 last_error=None,
-                discovered=1,
-                imported=1,
-                skipped=0,
-                failed=0,
+                cumulative_discovered=1,
+                cumulative_imported=1,
+                cumulative_skipped=0,
+                cumulative_failed=0,
                 sources=[],
             ),
             refreshed_utc=datetime.now(timezone.utc),
@@ -107,3 +108,91 @@ def test_dashboard_renders_live_board_shell() -> None:
     assert "Internet Targets" in html
     assert "target.local" in html
     assert '"target_id": "target-01"' in html
+
+
+def test_dashboard_escapes_script_closing_tags() -> None:
+    """Fields containing </script> must not break out of the inline script block."""
+
+    now = datetime.now(timezone.utc)
+    html = render_dashboard(
+        DashboardSnapshot(
+            summary=FleetSummary(
+                total_events=1,
+                total_agents=1,
+                total_targets=1,
+                active_sites=1,
+                failure_events=1,
+                timeout_events=0,
+                latest_timestamp_utc=now,
+            ),
+            agents=[
+                AgentSummary(
+                    agent_id="agent-01",
+                    site_id="site-a",
+                    total_targets=1,
+                    healthy_targets=0,
+                    failing_targets=1,
+                    timeout_targets=0,
+                    average_latency_ms=None,
+                    last_timestamp_utc=now,
+                )
+            ],
+            sites=[
+                SiteSummary(
+                    site_id="site-a",
+                    agent_count=1,
+                    target_count=1,
+                    failing_targets=1,
+                    average_latency_ms=None,
+                    last_timestamp_utc=now,
+                )
+            ],
+            targets=[
+                TargetSummary.model_validate(
+                    {
+                        "target_key": "agent-01::target-01",
+                        "target_id": "target-01",
+                        "target_kind": "internal",
+                        "agent_id": "agent-01",
+                        "fqdn": "target.local",
+                        "site_id": "site-a",
+                        "target_address": "10.0.0.10",
+                        "latest_result": "FAILURE",
+                        "last_test_type": "ping",
+                        "last_latency_ms": None,
+                        "last_timestamp_utc": now,
+                    }
+                )
+            ],
+            paths=[],
+            path_changes=[],
+            incidents=[
+                IncidentSummary(
+                    target_key="agent-01::target-01",
+                    target_id="target-01",
+                    fqdn="target.local",
+                    test_type="ping",
+                    result="FAILURE",
+                    error_code=None,
+                    details='evil</script><script>alert("xss")</script>',
+                    timestamp_utc=now,
+                )
+            ],
+            import_status=ImportStatus(
+                mode="disabled",
+                last_run_utc=None,
+                last_success_utc=None,
+                last_error=None,
+                cumulative_discovered=0,
+                cumulative_imported=0,
+                cumulative_skipped=0,
+                cumulative_failed=0,
+                sources=[],
+            ),
+            refreshed_utc=now,
+        )
+    )
+
+    # The literal </script> must be escaped so it cannot close the inline block.
+    assert "</script><script>" not in html
+    assert r"<\/script>" in html

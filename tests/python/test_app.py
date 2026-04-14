@@ -65,7 +65,7 @@ def test_dashboard_and_import_endpoints(tmp_path: Path) -> None:
         status_response = client.get("/api/v1/import/status")
         assert status_response.status_code == 200
         assert status_response.json()["mode"] == "local"
-        assert status_response.json()["imported"] == 1
+        assert status_response.json()["cumulative_imported"] == 1
         assert status_response.json()["sources"][0]["source_type"] == "local"
 
         dashboard_data_response = client.get("/api/v1/dashboard")
@@ -76,6 +76,11 @@ def test_dashboard_and_import_endpoints(tmp_path: Path) -> None:
         minute_window_response = client.get("/api/v1/dashboard?summary_window_minutes=30")
         assert minute_window_response.status_code == 200
         assert minute_window_response.json()["summary"]["total_events"] == 1
+
+        # summary_window_minutes=0 should return all history (unbounded window)
+        zero_window_response = client.get("/api/v1/summary?summary_window_minutes=0")
+        assert zero_window_response.status_code == 200
+        assert zero_window_response.json()["total_events"] >= 1
 
         dashboard_response = client.get("/")
         assert dashboard_response.status_code == 200

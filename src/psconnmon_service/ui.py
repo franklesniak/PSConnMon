@@ -2111,4 +2111,8 @@ def render_dashboard(snapshot: DashboardSnapshot) -> str:
     """Render the built-in PSConnMon dashboard shell."""
 
     payload = json.dumps(snapshot.model_dump(mode="json"))
-    return DASHBOARD_TEMPLATE.replace("__INITIAL_DATA__", payload)
+    # Escape embedded </script> sequences to prevent XSS breakout from the
+    # inline <script> block.  Replacing "</" with "<\/" is safe inside JSON
+    # string literals and prevents the HTML parser from seeing a closing tag.
+    safe_payload = payload.replace("</", r"<\/")
+    return DASHBOARD_TEMPLATE.replace("__INITIAL_DATA__", safe_payload)

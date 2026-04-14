@@ -54,8 +54,8 @@ def test_import_manager_imports_local_batches_and_skips_duplicates(tmp_path: Pat
     first_status = manager.run_once()
     second_status = manager.run_once()
 
-    assert first_status.imported == 1
-    assert second_status.skipped >= 1
+    assert first_status.cumulative_imported == 1
+    assert second_status.cumulative_skipped >= 1
     assert repository.get_fleet_summary().total_events == 1
 
 
@@ -68,7 +68,7 @@ def test_import_manager_records_invalid_jsonl_failures(tmp_path: Path) -> None:
     manager = ImportManager(repository, _make_settings(tmp_path))
     status = manager.run_once()
 
-    assert status.failed == 1
+    assert status.cumulative_failed == 1
     assert repository.get_fleet_summary().total_events == 0
     assert "Invalid JSON" in (status.last_error or "")
 
@@ -115,6 +115,6 @@ def test_import_manager_supports_hybrid_mode_with_fake_azure_source(
 
     status = manager.run_once()
 
-    assert status.imported == 2
+    assert status.cumulative_imported == 2
     assert {source.source_type for source in status.sources} == {"azure", "local"}
     assert repository.get_fleet_summary().total_events == 2

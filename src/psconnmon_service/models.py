@@ -289,10 +289,10 @@ class ImportStatus(CompatBaseModel):
     last_run_utc: datetime | None
     last_success_utc: datetime | None
     last_error: str | None
-    discovered: int
-    imported: int
-    skipped: int
-    failed: int
+    cumulative_discovered: int
+    cumulative_imported: int
+    cumulative_skipped: int
+    cumulative_failed: int
     sources: list[ImportSourceStatus]
 
 
