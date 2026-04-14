@@ -25,7 +25,13 @@ VALID_RESULTS = {"SUCCESS", "FAILURE", "TIMEOUT", "EMPTY", "SKIPPED", "FATAL", "
 class CompatBaseModel(BaseModel):
     """Compatibility helpers across Pydantic major versions."""
 
+    if PYDANTIC_V2:
+        model_config = ConfigDict(populate_by_name=True)
+
     if not PYDANTIC_V2:
+
+        class Config:
+            allow_population_by_field_name = True
 
         @classmethod
         def model_validate(cls, obj: object):
