@@ -53,31 +53,35 @@ def test_dashboard_renders_live_board_shell() -> None:
                 )
             ],
             targets=[
-                TargetSummary(
-                    target_key="agent-01::target-01",
-                    target_id="target-01",
-                    target_kind="internal",
-                    agent_id="agent-01",
-                    fqdn="target.local",
-                    site_id="site-a",
-                    target_address="10.0.0.10",
-                    latest_result="SUCCESS",
-                    last_test_type="ping",
-                    last_latency_ms=12.5,
-                    last_timestamp_utc=datetime.now(timezone.utc),
+                TargetSummary.model_validate(
+                    {
+                        "target_key": "agent-01::target-01",
+                        "target_id": "target-01",
+                        "target_kind": "internal",
+                        "agent_id": "agent-01",
+                        "fqdn": "target.local",
+                        "site_id": "site-a",
+                        "target_address": "10.0.0.10",
+                        "latest_result": "SUCCESS",
+                        "last_test_type": "ping",
+                        "last_latency_ms": 12.5,
+                        "last_timestamp_utc": datetime.now(timezone.utc),
+                    }
                 )
             ],
             paths=[
-                PathSummary(
-                    target_key="agent-01::target-01",
-                    target_id="target-01",
-                    target_kind="internal",
-                    fqdn="target.local",
-                    path_hash="abcd1234",
-                    path_preview="edge-gateway -> target.local",
-                    last_seen_utc=datetime.now(timezone.utc),
-                    hop_count=3,
-                    average_hop_latency_ms=8.1,
+                PathSummary.model_validate(
+                    {
+                        "target_key": "agent-01::target-01",
+                        "target_id": "target-01",
+                        "target_kind": "internal",
+                        "fqdn": "target.local",
+                        "path_hash": "abcd1234",
+                        "path_preview": "edge-gateway -> target.local",
+                        "last_seen_utc": datetime.now(timezone.utc),
+                        "hop_count": 3,
+                        "average_hop_latency_ms": 8.1,
+                    }
                 )
             ],
             path_changes=[],

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -14,10 +15,13 @@ def _write_jsonl_batch(batch_path: Path) -> None:
     """Write one valid JSONL event batch for import tests."""
 
     batch_path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp_utc = (
+        datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    )
     batch_path.write_text(
         "\n".join(
             [
-                '{"timestampUtc":"2026-04-09T12:00:00Z","agentId":"branch-01","siteId":"site-a",'
+                f'{{"timestampUtc":"{timestamp_utc}","agentId":"branch-01","siteId":"site-a",'
                 '"targetId":"fs01","fqdn":"fs01.corp.local","targetAddress":"10.10.20.15",'
                 '"testType":"ping","probeName":"Ping.Primary","result":"SUCCESS","latencyMs":12.5,'
                 '"loss":0.0,"errorCode":null,"details":"Reply from 10.10.20.15","dnsServer":null,'
@@ -112,10 +116,13 @@ def test_http_ingest_remains_available(tmp_path: Path) -> None:
     )
 
     app = create_app(settings=settings)
+    timestamp_utc = (
+        datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    )
     payload = {
         "events": [
             {
-                "timestampUtc": "2026-04-09T12:00:00Z",
+                "timestampUtc": timestamp_utc,
                 "agentId": "branch-01",
                 "siteId": "site-a",
                 "targetId": "fs01",
@@ -166,10 +173,13 @@ def test_domain_auth_events_surface_without_special_casing(tmp_path: Path) -> No
     )
 
     app = create_app(settings=settings)
+    timestamp_utc = (
+        datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    )
     payload = {
         "events": [
             {
-                "timestampUtc": "2026-04-09T12:05:00Z",
+                "timestampUtc": timestamp_utc,
                 "agentId": "pi-branch-01",
                 "siteId": "site-a",
                 "targetId": "dc01",

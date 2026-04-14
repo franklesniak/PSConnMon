@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from _pytest.monkeypatch import MonkeyPatch
+
 from psconnmon_service.config import ServiceSettings
 from psconnmon_service.importer import ImportBatch, ImportManager
 from psconnmon_service.storage import StorageRepository
@@ -72,7 +74,7 @@ def test_import_manager_records_invalid_jsonl_failures(tmp_path: Path) -> None:
 
 
 def test_import_manager_supports_hybrid_mode_with_fake_azure_source(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
     """Hybrid mode should ingest local and Azure batches without duplicate conflicts."""
 

@@ -8,7 +8,7 @@ import json
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from .config import ServiceSettings
 from .models import EventRecord, ImportStatus
@@ -116,7 +116,7 @@ class AzureBlobBatchSource:
 
         return batches
 
-    def _create_blob_service_client(self):
+    def _create_blob_service_client(self) -> Any:
         """Create an Azure BlobServiceClient using managed identity or SAS."""
 
         if self.settings.azure_storage_account == "":

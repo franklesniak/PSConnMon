@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -26,7 +27,7 @@ def create_app(
     import_manager = ImportManager(repository, resolved_settings)
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await asyncio.to_thread(import_manager.run_once)
         import_task = None
         if resolved_settings.import_mode != "disabled":
@@ -130,7 +131,9 @@ def create_app(
     def get_targets() -> list[dict[str, object]]:
         return [target.model_dump(mode="json") for target in repository.list_targets()]
 
-    @app.get("/api/v1/targets/{target_key}", response_model=TargetDetail, response_model_by_alias=False)
+    @app.get(
+        "/api/v1/targets/{target_key}", response_model=TargetDetail, response_model_by_alias=False
+    )
     def get_target_detail(
         target_key: str,
         window_minutes: int | None = Query(default=24 * 60, ge=0),

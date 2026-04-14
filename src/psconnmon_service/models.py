@@ -3,20 +3,28 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable
 
-try:
+if TYPE_CHECKING:
     from pydantic import BaseModel, ConfigDict, Field, field_validator
 
     PYDANTIC_V2 = True
-except ImportError:  # pragma: no cover - compatibility path for local bootstrap
-    from pydantic import BaseModel, Field, validator
+else:
+    try:
+        from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-    PYDANTIC_V2 = False
-    ConfigDict = dict
+        PYDANTIC_V2 = True
+    except ImportError:  # pragma: no cover - compatibility path for local bootstrap
+        from pydantic import BaseModel, Field, validator as _validator
 
-    def field_validator(*fields: str, **kwargs: object):
-        return validator(*fields, **kwargs)
+        PYDANTIC_V2 = False
+
+        def field_validator(
+            *fields: str, **kwargs: object
+        ) -> Callable[[Callable[..., Any]], classmethod[Any, Any, Any]]:
+            """Provide a Pydantic v2-style validator decorator on top of v1."""
+
+            return _validator(*fields, **kwargs)
 
 
 VALID_RESULTS = {"SUCCESS", "FAILURE", "TIMEOUT", "EMPTY", "SKIPPED", "FATAL", "INFO"}
@@ -25,16 +33,16 @@ VALID_RESULTS = {"SUCCESS", "FAILURE", "TIMEOUT", "EMPTY", "SKIPPED", "FATAL", "
 class CompatBaseModel(BaseModel):
     """Compatibility helpers across Pydantic major versions."""
 
-    if PYDANTIC_V2:
+    if TYPE_CHECKING or PYDANTIC_V2:
         model_config = ConfigDict(populate_by_name=True)
 
-    if not PYDANTIC_V2:
+    if not TYPE_CHECKING and not PYDANTIC_V2:
 
         class Config:
             allow_population_by_field_name = True
 
         @classmethod
-        def model_validate(cls, obj: object):
+        def model_validate(cls, obj: object) -> Any:
             return cls.parse_obj(obj)
 
         def model_dump(self, mode: str = "python", **kwargs: object) -> dict[str, Any]:
@@ -47,10 +55,10 @@ class CompatBaseModel(BaseModel):
 class EventRecord(CompatBaseModel):
     """Structured PSConnMon event produced by the PowerShell agent."""
 
-    if PYDANTIC_V2:
+    if TYPE_CHECKING or PYDANTIC_V2:
         model_config = ConfigDict(extra="allow")
 
-    if not PYDANTIC_V2:
+    if not TYPE_CHECKING and not PYDANTIC_V2:
 
         class Config:
             extra = "allow"

@@ -52,10 +52,14 @@ class ServiceSettings:
         if import_interval_seconds < 1:
             raise ValueError("PSCONNMON_IMPORT_INTERVAL_SECONDS must be greater than 0.")
 
+        database_path_text = (
+            database_path_override
+            if database_path_override is not None
+            else os.getenv("PSCONNMON_DB_PATH", "data/psconnmon.duckdb")
+        )
+
         return cls(
-            database_path=Path(
-                database_path_override or os.getenv("PSCONNMON_DB_PATH", "data/psconnmon.duckdb")
-            ),
+            database_path=Path(database_path_text),
             import_mode=import_mode,
             import_interval_seconds=import_interval_seconds,
             import_local_path=Path(os.getenv("PSCONNMON_IMPORT_LOCAL_PATH", "data/import")),

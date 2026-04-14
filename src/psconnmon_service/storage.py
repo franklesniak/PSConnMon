@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, TypeVar, cast
 
 import duckdb
 
 from .models import (
     AgentSummary,
+    CompatBaseModel,
     EventRecord,
     FleetSummary,
     ImportSourceStatus,
@@ -24,6 +26,8 @@ from .models import (
     TargetSummary,
     TestSummary,
 )
+
+TModel = TypeVar("TModel", bound=CompatBaseModel)
 
 
 class StorageRepository:
@@ -305,7 +309,7 @@ class StorageRepository:
         latest_error_source = max(
             (source for source in sources if source.last_error and source.last_run_utc is not None),
             default=None,
-            key=lambda source: source.last_run_utc,
+            key=lambda source: source.last_run_utc or datetime.min.replace(tzinfo=timezone.utc),
         )
 
         return ImportStatus(
@@ -336,7 +340,8 @@ class StorageRepository:
             parameters.append(window_start)
 
         with self._connect() as connection:
-            row = connection.execute(f"""
+            row = connection.execute(
+                f"""
                 SELECT
                     COUNT(*) AS total_events,
                     COUNT(DISTINCT agent_id) AS total_agents,
@@ -347,7 +352,20 @@ class StorageRepository:
                     MAX(timestamp_utc) AS latest_timestamp_utc
                 FROM events
                 {where_clause}
-                """, parameters).fetchone()
+                """,
+                parameters,
+            ).fetchone()
+
+        if row is None:
+            return FleetSummary(
+                total_events=0,
+                total_agents=0,
+                total_targets=0,
+                active_sites=0,
+                failure_events=0,
+                timeout_events=0,
+                latest_timestamp_utc=None,
+            )
 
         return FleetSummary(
             total_events=int(row[0] or 0),
@@ -425,7 +443,8 @@ class StorageRepository:
             rows = connection.execute(query).fetchall()
 
         return [
-            TargetSummary(
+            self._build_model(
+                TargetSummary,
                 target_key=row[0],
                 target_id=row[1],
                 target_kind=row[2],
@@ -436,7 +455,7 @@ class StorageRepository:
                 last_test_type=row[7],
                 latest_result=row[8],
                 last_latency_ms=row[9],
-                    last_timestamp_utc=self._normalize_timestamp(row[10]),
+                last_timestamp_utc=self._normalize_timestamp(row[10]),
             )
             for row in rows
         ]
@@ -621,7 +640,8 @@ class StorageRepository:
             rows = connection.execute(query).fetchall()
 
         return [
-            PathSummary(
+            self._build_model(
+                PathSummary,
                 target_key=row[0],
                 target_id=row[1],
                 target_kind=row[2],
@@ -658,7 +678,8 @@ class StorageRepository:
             rows = connection.execute(query, [limit]).fetchall()
 
         return [
-            IncidentSummary(
+            self._build_model(
+                IncidentSummary,
                 target_key=row[0],
                 target_id=row[1],
                 fqdn=row[2],
@@ -761,7 +782,8 @@ class StorageRepository:
             rows = connection.execute(query, [limit]).fetchall()
 
         return [
-            PathChangeSummary(
+            self._build_model(
+                PathChangeSummary,
                 target_key=row[0],
                 target_id=row[1],
                 target_kind=row[2],
@@ -801,15 +823,20 @@ class StorageRepository:
             time_filter = " AND timestamp_utc >= ?"
             parameters_prefix.append(window_start)
 
-        timeline_query = """
+        timeline_query = (
+            """
             SELECT timestamp_utc, latency_ms, result, test_type
             FROM events
             WHERE agent_id = ? AND target_id = ? AND latency_ms IS NOT NULL
-        """ + time_filter + """
+        """
+            + time_filter
+            + """
             ORDER BY timestamp_utc DESC
             LIMIT ?
         """
-        test_query = """
+        )
+        test_query = (
+            """
             WITH ranked AS (
                 SELECT
                     test_type,
@@ -825,7 +852,9 @@ class StorageRepository:
                     ) AS row_number
                 FROM events
                 WHERE agent_id = ? AND target_id = ? AND result <> 'INFO'
-        """ + time_filter + """
+        """
+            + time_filter
+            + """
             )
             SELECT
                 test_type,
@@ -839,7 +868,9 @@ class StorageRepository:
             WHERE row_number = 1
             ORDER BY test_type
         """
-        recent_event_query = """
+        )
+        recent_event_query = (
+            """
             SELECT
                 timestamp_utc,
                 test_type,
@@ -856,11 +887,15 @@ class StorageRepository:
                 metadata
             FROM events
             WHERE agent_id = ? AND target_id = ?
-        """ + time_filter + """
+        """
+            + time_filter
+            + """
             ORDER BY timestamp_utc DESC
             LIMIT 80
         """
-        path_query = """
+        )
+        path_query = (
+            """
             WITH latest_hops AS (
                 SELECT
                     agent_id || '::' || target_id AS target_key,
@@ -884,7 +919,9 @@ class StorageRepository:
                     ) AS row_number
                 FROM events
                 WHERE agent_id = ? AND target_id = ? AND test_type = 'traceroute' AND hop_index IS NOT NULL
-        """ + time_filter + """
+        """
+            + time_filter
+            + """
             )
             SELECT
                 target_key,
@@ -902,7 +939,9 @@ class StorageRepository:
             ORDER BY last_seen_utc DESC
             LIMIT 8
         """
-        incident_query = """
+        )
+        incident_query = (
+            """
             SELECT
                 target_id,
                 fqdn,
@@ -913,26 +952,29 @@ class StorageRepository:
                 timestamp_utc
             FROM events
             WHERE agent_id = ? AND target_id = ? AND result NOT IN ('SUCCESS', 'INFO')
-        """ + time_filter + """
+        """
+            + time_filter
+            + """
             ORDER BY timestamp_utc DESC
             LIMIT 12
         """
+        )
 
         with self._connect() as connection:
             timeline_rows = connection.execute(
                 timeline_query, [*parameters_prefix, timeline_limit]
             ).fetchall()
             test_rows = connection.execute(test_query, parameters_prefix).fetchall()
-            recent_event_rows = connection.execute(
-                recent_event_query, parameters_prefix
-            ).fetchall()
+            recent_event_rows = connection.execute(recent_event_query, parameters_prefix).fetchall()
             path_rows = connection.execute(path_query, parameters_prefix).fetchall()
             incident_rows = connection.execute(incident_query, parameters_prefix).fetchall()
 
-        return TargetDetail(
+        return self._build_model(
+            TargetDetail,
             target=targets[0],
             tests=[
-                TestSummary(
+                self._build_model(
+                    TestSummary,
                     test_type=row[0],
                     latest_result=row[1],
                     latest_probe_name=row[2],
@@ -944,7 +986,8 @@ class StorageRepository:
                 for row in test_rows
             ],
             recent_events=[
-                TargetEventSummary(
+                self._build_model(
+                    TargetEventSummary,
                     timestamp_utc=self._normalize_timestamp(row[0]),
                     test_type=row[1],
                     probe_name=row[2],
@@ -971,7 +1014,8 @@ class StorageRepository:
                 for row in reversed(timeline_rows)
             ],
             incidents=[
-                IncidentSummary(
+                self._build_model(
+                    IncidentSummary,
                     target_key=f"{agent_id}::{row[0]}",
                     target_id=row[0],
                     fqdn=row[1],
@@ -984,7 +1028,8 @@ class StorageRepository:
                 for row in incident_rows
             ],
             paths=[
-                PathSummary(
+                self._build_model(
+                    PathSummary,
                     target_key=row[0],
                     target_id=row[1],
                     target_kind=row[2],
@@ -1034,22 +1079,23 @@ class StorageRepository:
         if row is None:
             return None
 
-        return ImportSourceStatus(
+        return self._build_model(
+            ImportSourceStatus,
             source_type=str(row[0]),
             last_run_utc=self._normalize_optional_timestamp(row[1]),
             last_success_utc=self._normalize_optional_timestamp(row[2]),
             last_error=str(row[3]) if row[3] is not None else None,
             last_imported_batch_utc=self._normalize_optional_timestamp(row[4]),
             last_source_identifier=str(row[5]) if row[5] is not None else None,
-            last_run_discovered=int(row[6] or 0),
-            last_run_imported=int(row[7] or 0),
-            last_run_skipped=int(row[8] or 0),
-            last_run_failed=int(row[9] or 0),
-            last_run_backlog=int(row[10] or 0),
-            cumulative_discovered=int(row[11] or 0),
-            cumulative_imported=int(row[12] or 0),
-            cumulative_skipped=int(row[13] or 0),
-            cumulative_failed=int(row[14] or 0),
+            last_run_discovered=self._coerce_int(row[6]),
+            last_run_imported=self._coerce_int(row[7]),
+            last_run_skipped=self._coerce_int(row[8]),
+            last_run_failed=self._coerce_int(row[9]),
+            last_run_backlog=self._coerce_int(row[10]),
+            cumulative_discovered=self._coerce_int(row[11]),
+            cumulative_imported=self._coerce_int(row[12]),
+            cumulative_skipped=self._coerce_int(row[13]),
+            cumulative_failed=self._coerce_int(row[14]),
         )
 
     @staticmethod
@@ -1081,11 +1127,39 @@ class StorageRepository:
         if value is None:
             return {}
         if isinstance(value, dict):
+            if "metadata" in value and isinstance(value["metadata"], dict):
+                return value["metadata"]
             return value
         if isinstance(value, str):
             try:
                 parsed = json.loads(value)
             except json.JSONDecodeError:
                 return {}
-            return parsed if isinstance(parsed, dict) else {}
+            if not isinstance(parsed, dict):
+                return {}
+            if "metadata" in parsed and isinstance(parsed["metadata"], dict):
+                return parsed["metadata"]
+            return parsed
         return {}
+
+    @staticmethod
+    def _coerce_int(value: object) -> int:
+        """Normalize nullable numeric aggregates into plain integers."""
+
+        if value is None:
+            return 0
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            return int(value)
+        return int(cast(Any, value))
+
+    @staticmethod
+    def _build_model(model_type: type[TModel], /, **values: object) -> TModel:
+        """Instantiate aliased Pydantic models using snake_case field names."""
+
+        return model_type.model_validate(values)

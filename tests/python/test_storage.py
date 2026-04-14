@@ -481,6 +481,7 @@ def test_storage_normalizes_timestamps_to_utc(tmp_path: Path) -> None:
     target = repository.list_targets()[0]
     detail = repository.get_target_detail(target.target_key)
 
+    assert target.last_timestamp_utc is not None
     assert target.last_timestamp_utc.tzinfo == timezone.utc
     assert detail is not None
     assert detail.recent_events[0].timestamp_utc.tzinfo == timezone.utc
