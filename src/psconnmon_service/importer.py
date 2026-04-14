@@ -171,16 +171,20 @@ class ImportManager:
             return self.repository.get_import_status(self.settings.import_mode)
 
     async def run_forever(self) -> None:
-        """Run import cycles until the app shuts down."""
+        """Run import cycles until the app shuts down.
+
+        Callers are responsible for any desired immediate first cycle; this loop
+        waits `import_interval_seconds` between cycles so it does not double up
+        on a synchronous `run_once` fired during application startup.
+        """
 
         while not self._stop_event.is_set():
-            await asyncio.to_thread(self.run_once)
             try:
                 await asyncio.wait_for(
                     self._stop_event.wait(), timeout=self.settings.import_interval_seconds
                 )
             except TimeoutError:
-                continue
+                await asyncio.to_thread(self.run_once)
 
     def stop(self) -> None:
         """Stop the periodic import loop."""

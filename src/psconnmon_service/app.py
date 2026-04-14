@@ -108,7 +108,7 @@ def create_app(
 
     @app.get("/api/v1/summary", response_model=FleetSummary, response_model_by_alias=False)
     def get_summary(
-        summary_window_minutes: int | None = Query(default=24 * 60, ge=0),
+        summary_window_minutes: int | None = Query(default=None, ge=0),
         summary_window_hours: int | None = Query(default=None, ge=0),
     ) -> FleetSummary:
         return repository.get_fleet_summary(
@@ -117,7 +117,7 @@ def create_app(
 
     @app.get("/api/v1/dashboard", response_model=DashboardSnapshot, response_model_by_alias=False)
     def get_dashboard_snapshot(
-        summary_window_minutes: int | None = Query(default=24 * 60, ge=0),
+        summary_window_minutes: int | None = Query(default=None, ge=0),
         summary_window_hours: int | None = Query(default=None, ge=0),
     ) -> DashboardSnapshot:
         return build_dashboard_snapshot(
@@ -143,7 +143,7 @@ def create_app(
     )
     def get_target_detail(
         target_key: str,
-        window_minutes: int | None = Query(default=24 * 60, ge=0),
+        window_minutes: int | None = Query(default=None, ge=0),
         window_hours: int | None = Query(default=None, ge=0),
     ) -> TargetDetail:
         detail = repository.get_target_detail(
