@@ -765,6 +765,14 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             border-color: rgba(180, 67, 54, 0.28);
         }
 
+        .toolbar select {
+            border: 1px solid rgba(26, 34, 35, 0.14);
+            border-radius: 999px;
+            padding: 10px 40px 10px 14px;
+            background: rgba(255, 255, 255, 0.82);
+            color: var(--ink);
+        }
+
         @media (max-width: 1180px) {
             .layout {
                 grid-template-columns: 1fr;
@@ -816,10 +824,17 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             <div class="banner-meta">
                 <div class="site-chip"><span>Updated</span><strong id="last-refresh-label">--</strong></div>
                 <div class="site-chip"><span>Import mode</span><strong id="import-mode-label">--</strong></div>
+                <div class="site-chip"><span>Timezone</span><strong id="timezone-label">Browser local</strong></div>
             </div>
             <div class="banner-lower">
                 <div class="metric-grid" id="metric-grid"></div>
                 <div class="toolbar">
+                    <select id="summary-window-filter" aria-label="Summary window">
+                        <option value="24">Last 24 hours</option>
+                        <option value="168">Last 7 days</option>
+                        <option value="720">Last 30 days</option>
+                        <option value="0">All imported history</option>
+                    </select>
                     <button id="refresh-now-button" type="button">Refresh now</button>
                     <button id="toggle-refresh-button" type="button">Pause auto-refresh</button>
                 </div>
@@ -949,7 +964,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
                 <svg class="detail-chart" id="detail-chart" viewBox="0 0 720 280" role="img" aria-label="Latency timeline"></svg>
 
-                <div class="detail-columns">
+                <div class="detail-columns" id="detail-columns">
                     <div class="detail-column">
                         <section class="detail-section">
                             <div class="panel-head" style="margin-bottom: 12px;">
@@ -973,7 +988,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     </div>
 
                     <div class="detail-column">
-                        <section class="detail-section">
+                        <section class="detail-section" id="detail-path-section">
                             <div class="panel-head" style="margin-bottom: 12px;">
                                 <div>
                                     <h3>Path History</h3>
@@ -994,6 +1009,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             snapshot: __INITIAL_DATA__,
             selectedTargetKey: null,
             selectedTestType: "all",
+            summaryWindowHours: 24,
             targetDetail: null,
             filters: {
                 search: "",
@@ -1026,7 +1042,37 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 return String(value);
             }
 
-            return date.toLocaleString();
+            return date.toLocaleString([], { timeZoneName: "short" });
+        }
+
+        function formatUtcOffset(minutesEastOfUtc) {
+            const totalMinutes = Math.abs(minutesEastOfUtc);
+            const sign = minutesEastOfUtc >= 0 ? "+" : "-";
+            const hours = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
+            const minutes = String(totalMinutes % 60).padStart(2, "0");
+            return `UTC${sign}${hours}:${minutes}`;
+        }
+
+        function getBrowserTimeZoneLabel() {
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Browser local";
+            const minutesEastOfUtc = -new Date().getTimezoneOffset();
+            return `${timeZone} (${formatUtcOffset(minutesEastOfUtc)})`;
+        }
+
+        function formatSummaryWindowLabel() {
+            if (dashboardState.summaryWindowHours === 0) {
+                return "all imported history";
+            }
+            if (dashboardState.summaryWindowHours === 24) {
+                return "last 24 hours";
+            }
+            if (dashboardState.summaryWindowHours === 168) {
+                return "last 7 days";
+            }
+            if (dashboardState.summaryWindowHours === 720) {
+                return "last 30 days";
+            }
+            return `last ${dashboardState.summaryWindowHours} hours`;
         }
 
         function formatAgo(value) {
@@ -1172,12 +1218,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
         }
 
         function pickDefaultTarget(targets) {
-            if (!targets.length) {
-                return null;
-            }
-
-            const degraded = targets.find((target) => String(target.latest_result).toUpperCase() !== "SUCCESS");
-            return (degraded || targets[0]).target_key;
+            return null;
         }
 
         function ensureSelectedTarget() {
@@ -1211,7 +1252,9 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
             dashboardState.isLoading = true;
             try {
-                dashboardState.snapshot = await fetchJson("/api/v1/dashboard");
+                dashboardState.snapshot = await fetchJson(
+                    `/api/v1/dashboard?summary_window_hours=${dashboardState.summaryWindowHours}`
+                );
                 ensureSelectedTarget();
                 renderDashboard();
 
@@ -1264,7 +1307,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 {
                     label: "Failures",
                     value: summary.failure_events,
-                    meta: `${summary.timeout_events} timeout events`,
+                    meta: `${summary.timeout_events} timeout events · ${formatSummaryWindowLabel()}`,
                 },
                 {
                     label: "Freshness",
@@ -1289,6 +1332,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             );
             document.getElementById("import-mode-label").textContent =
                 dashboardState.snapshot.import_status.mode || "disabled";
+            document.getElementById("timezone-label").textContent = getBrowserTimeZoneLabel();
         }
 
         function renderAgents() {
@@ -1381,6 +1425,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             const siteFilter = document.getElementById("site-filter");
             const searchInput = document.getElementById("target-search");
             const statusRail = document.getElementById("status-rail");
+            const summaryWindowFilter = document.getElementById("summary-window-filter");
 
             searchInput.value = dashboardState.filters.search;
 
@@ -1405,6 +1450,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 (status) => `<option value="${escapeHtml(status)}">${escapeHtml(status)}</option>`
             ).join("");
             statusFilter.value = dashboardState.filters.status;
+            summaryWindowFilter.value = String(dashboardState.summaryWindowHours);
 
             statusRail.innerHTML = STATUS_ORDER.map((status) => {
                 const active = dashboardState.filters.status === status;
@@ -1558,6 +1604,8 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             const detail = dashboardState.targetDetail;
             const title = document.getElementById("detail-title");
             const copy = document.getElementById("detail-copy");
+            const detailColumns = document.getElementById("detail-columns");
+            const pathSection = document.getElementById("detail-path-section");
             const statusShell = document.getElementById("detail-status-shell");
             const metrics = document.getElementById("detail-metrics");
             const testRail = document.getElementById("detail-test-rail");
@@ -1573,6 +1621,8 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 testRail.innerHTML = '<div class="empty-state">No tests available.</div>';
                 eventList.innerHTML = '<li>No recent events available.</li>';
                 pathList.innerHTML = '<li>No path history available.</li>';
+                pathSection.hidden = true;
+                detailColumns.style.gridTemplateColumns = "1fr";
                 drawLatencyChart([]);
                 return;
             }
@@ -1590,6 +1640,11 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 detail.target.target_kind === "external"
                     ? "This view summarizes outbound internet probe behavior for the selected reference endpoint, including internet quality sampling and traceroute drift from the reporting collector."
                     : "This view summarizes host-level connectivity to the selected internal target. Every address, latency, and recent event shown here represents connectivity to that specific host.";
+            pathSection.hidden = detail.target.target_kind !== "external";
+            detailColumns.style.gridTemplateColumns =
+                detail.target.target_kind === "external"
+                    ? "minmax(0, 1.1fr) minmax(0, 0.9fr)"
+                    : "1fr";
             statusShell.innerHTML = buildStatusBadge(detail.target.latest_result);
             metrics.innerHTML = [
                 {
@@ -1826,10 +1881,15 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 renderRefreshState();
             });
 
+            document.getElementById("summary-window-filter").addEventListener("change", async (event) => {
+                dashboardState.summaryWindowHours = Number(event.target.value || "24");
+                await refreshDashboard({ forceTargetDetail: false });
+            });
+
             document.getElementById("target-search").addEventListener("input", async (event) => {
                 dashboardState.filters.search = event.target.value;
                 ensureSelectedTarget();
-                renderTargets();
+                renderDashboard();
                 await refreshTargetDetail(dashboardState.selectedTargetKey);
             });
 
@@ -1897,7 +1957,8 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     return;
                 }
 
-                dashboardState.selectedTargetKey = row.dataset.targetKey;
+                dashboardState.selectedTargetKey =
+                    dashboardState.selectedTargetKey === row.dataset.targetKey ? null : row.dataset.targetKey;
                 dashboardState.selectedTestType = "all";
                 renderTargets();
                 await refreshTargetDetail(dashboardState.selectedTargetKey);
@@ -1916,6 +1977,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 dashboardState.selectedTestType = "traceroute";
                 renderTargets();
                 await refreshTargetDetail(dashboardState.selectedTargetKey);
+                document.querySelector(".detail-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
             });
 
             document.getElementById("detail-test-rail").addEventListener("click", (event) => {

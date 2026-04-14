@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from psconnmon_service.models import EventRecord
@@ -143,6 +144,74 @@ def test_storage_ignores_info_events_for_latest_health_state(tmp_path: Path) -> 
     assert agents[0].failing_targets == 0
     assert agents[0].timeout_targets == 0
     assert sites[0].failing_targets == 0
+
+
+def test_storage_uses_latest_latency_event_for_current_summaries(tmp_path: Path) -> None:
+    """Latest target state and displayed latency should be sourced independently."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    events = [
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:00:00Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "ping",
+                "probeName": "Ping.Primary",
+                "result": "SUCCESS",
+                "latencyMs": 12.5,
+                "loss": 0.0,
+                "errorCode": None,
+                "details": "Reply from 10.10.20.15",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:01:00Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "share",
+                "probeName": "Share.Access",
+                "result": "SUCCESS",
+                "latencyMs": None,
+                "loss": None,
+                "errorCode": None,
+                "details": "Share access confirmed.",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+    ]
+
+    repository.ingest_events(events)
+
+    targets = repository.list_targets()
+    agents = repository.list_agents()
+    sites = repository.list_sites()
+
+    assert targets[0].latest_result == "SUCCESS"
+    assert targets[0].last_test_type == "share"
+    assert targets[0].last_latency_ms == 12.5
+    assert agents[0].average_latency_ms == 12.5
+    assert sites[0].average_latency_ms == 12.5
 
 
 def test_storage_separates_internet_targets_and_exposes_drilldown_data(tmp_path: Path) -> None:
@@ -305,3 +374,72 @@ def test_storage_keeps_same_target_id_separate_per_agent(tmp_path: Path) -> None
 
     assert summary.total_targets == 2
     assert {target.target_key for target in targets} == {"branch-01::fs01", "branch-02::fs01"}
+
+
+def test_storage_summary_supports_rolling_window(tmp_path: Path) -> None:
+    """Fleet summaries should be able to scope counts to a recent rolling window."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    old_timestamp = (now - timedelta(days=3)).isoformat().replace("+00:00", "Z")
+    recent_timestamp = (now - timedelta(hours=2)).isoformat().replace("+00:00", "Z")
+
+    events = [
+        EventRecord.model_validate(
+            {
+                "timestampUtc": old_timestamp,
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "ping",
+                "probeName": "Ping.Primary",
+                "result": "FAILURE",
+                "latencyMs": None,
+                "loss": 100.0,
+                "errorCode": "TimedOut",
+                "details": "Ping timed out.",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+        EventRecord.model_validate(
+            {
+                "timestampUtc": recent_timestamp,
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "ping",
+                "probeName": "Ping.Primary",
+                "result": "SUCCESS",
+                "latencyMs": 10.5,
+                "loss": 0.0,
+                "errorCode": None,
+                "details": "Reply from 10.10.20.15",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+    ]
+
+    repository.ingest_events(events)
+
+    all_time = repository.get_fleet_summary()
+    recent = repository.get_fleet_summary(window_hours=24)
+
+    assert all_time.failure_events == 1
+    assert recent.failure_events == 0
+    assert recent.total_events == 1

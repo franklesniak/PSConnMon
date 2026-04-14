@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import duckdb
@@ -325,11 +325,18 @@ class StorageRepository:
             sources=sources,
         )
 
-    def get_fleet_summary(self) -> FleetSummary:
+    def get_fleet_summary(self, window_hours: int | None = None) -> FleetSummary:
         """Return a one-row aggregated fleet summary."""
 
+        where_clause = ""
+        parameters: list[object] = []
+        if window_hours is not None:
+            window_start = datetime.utcnow() - timedelta(hours=window_hours)
+            where_clause = "WHERE timestamp_utc >= ?"
+            parameters.append(window_start)
+
         with self._connect() as connection:
-            row = connection.execute("""
+            row = connection.execute(f"""
                 SELECT
                     COUNT(*) AS total_events,
                     COUNT(DISTINCT agent_id) AS total_agents,
@@ -339,7 +346,8 @@ class StorageRepository:
                     SUM(CASE WHEN result = 'TIMEOUT' THEN 1 ELSE 0 END) AS timeout_events,
                     MAX(timestamp_utc) AS latest_timestamp_utc
                 FROM events
-                """).fetchone()
+                {where_clause}
+                """, parameters).fetchone()
 
         return FleetSummary(
             total_events=int(row[0] or 0),
@@ -355,7 +363,7 @@ class StorageRepository:
         """Return current status per target."""
 
         query = """
-            WITH ranked AS (
+            WITH latest_target_state AS (
                 SELECT
                     agent_id || '::' || target_id AS target_key,
                     target_id,
@@ -372,7 +380,6 @@ class StorageRepository:
                     target_address,
                     test_type,
                     result,
-                    latency_ms,
                     timestamp_utc,
                     ROW_NUMBER() OVER (
                         PARTITION BY agent_id, target_id
@@ -380,22 +387,38 @@ class StorageRepository:
                     ) AS row_number
                 FROM events
                 WHERE result <> 'INFO'
+            ),
+            latest_latency AS (
+                SELECT
+                    agent_id,
+                    target_id,
+                    latency_ms,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY agent_id, target_id
+                        ORDER BY timestamp_utc DESC
+                    ) AS row_number
+                FROM events
+                WHERE result <> 'INFO' AND latency_ms IS NOT NULL
             )
             SELECT
-                target_key,
-                target_id,
-                target_kind,
-                agent_id,
-                fqdn,
-                site_id,
-                target_address,
-                test_type,
-                result,
-                latency_ms,
-                timestamp_utc
-            FROM ranked
-            WHERE row_number = 1
-            ORDER BY target_kind, fqdn, agent_id
+                state.target_key,
+                state.target_id,
+                state.target_kind,
+                state.agent_id,
+                state.fqdn,
+                state.site_id,
+                state.target_address,
+                state.test_type,
+                state.result,
+                latency.latency_ms,
+                state.timestamp_utc
+            FROM latest_target_state AS state
+            LEFT JOIN latest_latency AS latency
+                ON latency.agent_id = state.agent_id
+               AND latency.target_id = state.target_id
+               AND latency.row_number = 1
+            WHERE state.row_number = 1
+            ORDER BY state.target_kind, state.fqdn, state.agent_id
         """
 
         with self._connect() as connection:
@@ -428,7 +451,6 @@ class StorageRepository:
                     site_id,
                     target_id,
                     result,
-                    latency_ms,
                     timestamp_utc,
                     ROW_NUMBER() OVER (
                         PARTITION BY agent_id, target_id
@@ -436,20 +458,36 @@ class StorageRepository:
                     ) AS row_number
                 FROM events
                 WHERE result <> 'INFO'
+            ),
+            latest_target_latency AS (
+                SELECT
+                    agent_id,
+                    target_id,
+                    latency_ms,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY agent_id, target_id
+                        ORDER BY timestamp_utc DESC
+                    ) AS row_number
+                FROM events
+                WHERE result <> 'INFO' AND latency_ms IS NOT NULL
             )
             SELECT
-                agent_id,
-                MAX(site_id) AS site_id,
+                state.agent_id,
+                MAX(state.site_id) AS site_id,
                 COUNT(*) AS total_targets,
-                SUM(CASE WHEN result = 'SUCCESS' THEN 1 ELSE 0 END) AS healthy_targets,
-                SUM(CASE WHEN result IN ('FAILURE', 'FATAL') THEN 1 ELSE 0 END) AS failing_targets,
-                SUM(CASE WHEN result = 'TIMEOUT' THEN 1 ELSE 0 END) AS timeout_targets,
-                AVG(latency_ms) AS average_latency_ms,
-                MAX(timestamp_utc) AS last_timestamp_utc
-            FROM latest_target_state
-            WHERE row_number = 1
-            GROUP BY agent_id
-            ORDER BY last_timestamp_utc DESC, agent_id
+                SUM(CASE WHEN state.result = 'SUCCESS' THEN 1 ELSE 0 END) AS healthy_targets,
+                SUM(CASE WHEN state.result IN ('FAILURE', 'FATAL') THEN 1 ELSE 0 END) AS failing_targets,
+                SUM(CASE WHEN state.result = 'TIMEOUT' THEN 1 ELSE 0 END) AS timeout_targets,
+                AVG(latency.latency_ms) AS average_latency_ms,
+                MAX(state.timestamp_utc) AS last_timestamp_utc
+            FROM latest_target_state AS state
+            LEFT JOIN latest_target_latency AS latency
+                ON latency.agent_id = state.agent_id
+               AND latency.target_id = state.target_id
+               AND latency.row_number = 1
+            WHERE state.row_number = 1
+            GROUP BY state.agent_id
+            ORDER BY last_timestamp_utc DESC, state.agent_id
         """
 
         with self._connect() as connection:
@@ -479,7 +517,6 @@ class StorageRepository:
                     agent_id,
                     target_id,
                     result,
-                    latency_ms,
                     timestamp_utc,
                     ROW_NUMBER() OVER (
                         PARTITION BY site_id, agent_id, target_id
@@ -487,18 +524,36 @@ class StorageRepository:
                     ) AS row_number
                 FROM events
                 WHERE result <> 'INFO'
+            ),
+            latest_target_latency AS (
+                SELECT
+                    site_id,
+                    agent_id,
+                    target_id,
+                    latency_ms,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY site_id, agent_id, target_id
+                        ORDER BY timestamp_utc DESC
+                    ) AS row_number
+                FROM events
+                WHERE result <> 'INFO' AND latency_ms IS NOT NULL
             )
             SELECT
-                site_id,
-                COUNT(DISTINCT agent_id) AS agent_count,
+                state.site_id,
+                COUNT(DISTINCT state.agent_id) AS agent_count,
                 COUNT(*) AS target_count,
-                SUM(CASE WHEN result IN ('FAILURE', 'FATAL', 'TIMEOUT') THEN 1 ELSE 0 END) AS failing_targets,
-                AVG(latency_ms) AS average_latency_ms,
-                MAX(timestamp_utc) AS last_timestamp_utc
-            FROM latest_target_state
-            WHERE row_number = 1
-            GROUP BY site_id
-            ORDER BY site_id
+                SUM(CASE WHEN state.result IN ('FAILURE', 'FATAL', 'TIMEOUT') THEN 1 ELSE 0 END) AS failing_targets,
+                AVG(latency.latency_ms) AS average_latency_ms,
+                MAX(state.timestamp_utc) AS last_timestamp_utc
+            FROM latest_target_state AS state
+            LEFT JOIN latest_target_latency AS latency
+                ON latency.site_id = state.site_id
+               AND latency.agent_id = state.agent_id
+               AND latency.target_id = state.target_id
+               AND latency.row_number = 1
+            WHERE state.row_number = 1
+            GROUP BY state.site_id
+            ORDER BY state.site_id
         """
 
         with self._connect() as connection:

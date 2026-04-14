@@ -6,7 +6,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
 from .config import ServiceSettings
@@ -44,11 +44,11 @@ def create_app(
     app.state.import_manager = import_manager
     app.state.settings = resolved_settings
 
-    def build_dashboard_snapshot() -> DashboardSnapshot:
+    def build_dashboard_snapshot(summary_window_hours: int | None = 24) -> DashboardSnapshot:
         """Build the full live-dashboard payload from repository state."""
 
         return DashboardSnapshot(
-            summary=repository.get_fleet_summary(),
+            summary=repository.get_fleet_summary(window_hours=summary_window_hours),
             agents=repository.list_agents(),
             sites=repository.list_sites(),
             targets=repository.list_targets(),
@@ -88,12 +88,14 @@ def create_app(
         return repository.get_import_status(resolved_settings.import_mode)
 
     @app.get("/api/v1/summary", response_model=FleetSummary, response_model_by_alias=False)
-    def get_summary() -> FleetSummary:
-        return repository.get_fleet_summary()
+    def get_summary(summary_window_hours: int = Query(default=24, ge=0)) -> FleetSummary:
+        return repository.get_fleet_summary(window_hours=summary_window_hours or None)
 
     @app.get("/api/v1/dashboard", response_model=DashboardSnapshot, response_model_by_alias=False)
-    def get_dashboard_snapshot() -> DashboardSnapshot:
-        return build_dashboard_snapshot()
+    def get_dashboard_snapshot(
+        summary_window_hours: int = Query(default=24, ge=0),
+    ) -> DashboardSnapshot:
+        return build_dashboard_snapshot(summary_window_hours=summary_window_hours or None)
 
     @app.get("/api/v1/agents")
     def get_agents() -> list[dict[str, object]]:
