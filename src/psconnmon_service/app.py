@@ -23,6 +23,12 @@ def create_app(
 ) -> FastAPI:
     """Create the PSConnMon reporting application."""
 
+    if settings is not None and database_path is not None:
+        raise ValueError(
+            "create_app() accepts either 'settings' or 'database_path', not both. "
+            "Pass a fully constructed ServiceSettings via 'settings' when overriding."
+        )
+
     resolved_settings = settings or ServiceSettings.from_env(database_path_override=database_path)
     repository = StorageRepository(resolved_settings.database_path)
     import_manager = ImportManager(repository, resolved_settings)
@@ -161,6 +167,3 @@ def create_app(
         return [incident.model_dump(mode="json") for incident in repository.list_incidents()]
 
     return app
-
-
-app = create_app()

@@ -13,8 +13,14 @@ COPY pyproject.toml README.md /app/
 COPY src /app/src
 
 RUN pip install --upgrade pip \
-    && pip install .
+    && pip install . \
+    && mkdir -p /data/import \
+    && groupadd --system psconnmon \
+    && useradd --system --gid psconnmon --home-dir /app --shell /usr/sbin/nologin psconnmon \
+    && chown -R psconnmon:psconnmon /app /data
 
 EXPOSE 8080
 
-CMD ["python", "-m", "uvicorn", "psconnmon_service.app:app", "--host", "0.0.0.0", "--port", "8080"]
+USER psconnmon
+
+CMD ["python", "-m", "uvicorn", "psconnmon_service.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8080"]
