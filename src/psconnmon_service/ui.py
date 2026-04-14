@@ -561,11 +561,16 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
             gap: 18px;
             align-items: start;
+            margin-top: 18px;
         }
 
         .detail-column {
             display: grid;
             gap: 18px;
+        }
+
+        .detail-column .detail-section:first-child {
+            margin-top: 6px;
         }
 
         .detail-section + .detail-section {
@@ -1145,6 +1150,19 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             return number.toFixed(digits);
         }
 
+        function sampleSeries(series, maxPoints = 48) {
+            if (series.length <= maxPoints) {
+                return series;
+            }
+
+            const sampled = [];
+            for (let index = 0; index < maxPoints; index += 1) {
+                const sourceIndex = Math.round((index / (maxPoints - 1)) * (series.length - 1));
+                sampled.push(series[sourceIndex]);
+            }
+            return sampled;
+        }
+
         function getStatusClass(result) {
             const normalized = String(result || "").toUpperCase();
             if (normalized === "SUCCESS") {
@@ -1721,10 +1739,6 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     label: "Latency",
                     value: `${formatNumber(detail.target.last_latency_ms)} ms`,
                 },
-                {
-                    label: "Target key",
-                    value: detail.target.target_key,
-                },
             ]
                 .map(
                     (item) => `
@@ -1805,16 +1819,17 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                         point.test_type === dashboardState.selectedTestType
                     )
             );
+            const displayedSeries = sampleSeries(filteredSeries, 48);
             chartMeta.innerHTML = `
                 <span>Showing ${escapeHtml(formatSummaryWindowLabel())}</span>
-                <span>${escapeHtml(String(filteredSeries.length))} latency samples</span>
+                <span>${escapeHtml(String(displayedSeries.length))} plotted of ${escapeHtml(String(filteredSeries.length))} samples</span>
                 <span>${escapeHtml(
                     dashboardState.selectedTestType === "all"
                         ? "all eligible tests"
                         : `${dashboardState.selectedTestType} only`
                 )}</span>
             `;
-            drawLatencyChart(filteredSeries);
+            drawLatencyChart(displayedSeries);
         }
 
         function drawLatencyChart(series) {
