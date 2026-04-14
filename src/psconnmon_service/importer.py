@@ -66,10 +66,11 @@ class LocalBatchSource:
                 continue
 
             content = resolved_path.read_text(encoding="utf-8")
+            relative_identifier = resolved_path.relative_to(resolved_root).as_posix()
             batches.append(
                 ImportBatch(
                     source_type=self.source_type,
-                    source_identifier=str(resolved_path),
+                    source_identifier=relative_identifier,
                     fingerprint=_build_file_fingerprint(content),
                     content=content,
                 )
