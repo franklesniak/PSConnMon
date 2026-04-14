@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, TypeVar, cast
@@ -36,6 +37,12 @@ class StorageRepository:
     def __init__(self, database_path: Path | str) -> None:
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        # Serializes DuckDB write operations across the FastAPI threadpool and
+        # the background import loop (see ADR-0002 / PR #14 review).  DuckDB
+        # only supports one writer at a time; without this guard, the ingest
+        # endpoint can race the import worker and surface intermittent
+        # transaction failures under load.
+        self._write_lock = threading.RLock()
         self._initialize()
 
     def _connect(self) -> duckdb.DuckDBPyConnection:
@@ -101,7 +108,7 @@ class StorageRepository:
         """Insert validated events into storage."""
 
         rows = [self._event_to_row(event) for event in events]
-        with self._connect() as connection:
+        with self._write_lock, self._connect() as connection:
             connection.executemany(
                 """
                 INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -121,7 +128,7 @@ class StorageRepository:
         """Insert one imported batch and record it in the idempotency ledger."""
 
         rows = [self._event_to_row(event) for event in events]
-        with self._connect() as connection:
+        with self._write_lock, self._connect() as connection:
             connection.execute("BEGIN TRANSACTION")
             try:
                 connection.executemany(
@@ -192,61 +199,66 @@ class StorageRepository:
     ) -> ImportSourceStatus:
         """Upsert source-level import status and cumulative counters."""
 
-        previous = self.get_source_status(source_type)
-        current_run = datetime.utcnow()
-        previous_success = previous.last_success_utc if previous is not None else None
-        last_success = current_run if mark_success else previous_success
-        previous_last_import = previous.last_imported_batch_utc if previous is not None else None
-        effective_last_import = last_imported_batch_utc or previous_last_import
-
-        cumulative_discovered = discovered + (previous.cumulative_discovered if previous else 0)
-        cumulative_imported = imported + (previous.cumulative_imported if previous else 0)
-        cumulative_skipped = skipped + (previous.cumulative_skipped if previous else 0)
-        cumulative_failed = failed + (previous.cumulative_failed if previous else 0)
-
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO import_source_status VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (source_type) DO UPDATE SET
-                    last_run_utc = excluded.last_run_utc,
-                    last_success_utc = excluded.last_success_utc,
-                    last_error = excluded.last_error,
-                    last_imported_batch_utc = excluded.last_imported_batch_utc,
-                    last_source_identifier = excluded.last_source_identifier,
-                    last_run_discovered = excluded.last_run_discovered,
-                    last_run_imported = excluded.last_run_imported,
-                    last_run_skipped = excluded.last_run_skipped,
-                    last_run_failed = excluded.last_run_failed,
-                    last_run_backlog = excluded.last_run_backlog,
-                    cumulative_discovered = excluded.cumulative_discovered,
-                    cumulative_imported = excluded.cumulative_imported,
-                    cumulative_skipped = excluded.cumulative_skipped,
-                    cumulative_failed = excluded.cumulative_failed
-                """,
-                [
-                    source_type,
-                    current_run,
-                    last_success,
-                    last_error,
-                    effective_last_import,
-                    last_source_identifier,
-                    discovered,
-                    imported,
-                    skipped,
-                    failed,
-                    backlog,
-                    cumulative_discovered,
-                    cumulative_imported,
-                    cumulative_skipped,
-                    cumulative_failed,
-                ],
+        # Hold the write lock across the read-modify-write so cumulative
+        # counters remain consistent under concurrent writers.
+        with self._write_lock:
+            previous = self.get_source_status(source_type)
+            current_run = datetime.utcnow()
+            previous_success = previous.last_success_utc if previous is not None else None
+            last_success = current_run if mark_success else previous_success
+            previous_last_import = (
+                previous.last_imported_batch_utc if previous is not None else None
             )
+            effective_last_import = last_imported_batch_utc or previous_last_import
 
-        source_status = self.get_source_status(source_type)
-        if source_status is None:
-            raise ValueError(f"Failed to persist import source status for '{source_type}'.")
-        return source_status
+            cumulative_discovered = discovered + (previous.cumulative_discovered if previous else 0)
+            cumulative_imported = imported + (previous.cumulative_imported if previous else 0)
+            cumulative_skipped = skipped + (previous.cumulative_skipped if previous else 0)
+            cumulative_failed = failed + (previous.cumulative_failed if previous else 0)
+
+            with self._connect() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO import_source_status VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (source_type) DO UPDATE SET
+                        last_run_utc = excluded.last_run_utc,
+                        last_success_utc = excluded.last_success_utc,
+                        last_error = excluded.last_error,
+                        last_imported_batch_utc = excluded.last_imported_batch_utc,
+                        last_source_identifier = excluded.last_source_identifier,
+                        last_run_discovered = excluded.last_run_discovered,
+                        last_run_imported = excluded.last_run_imported,
+                        last_run_skipped = excluded.last_run_skipped,
+                        last_run_failed = excluded.last_run_failed,
+                        last_run_backlog = excluded.last_run_backlog,
+                        cumulative_discovered = excluded.cumulative_discovered,
+                        cumulative_imported = excluded.cumulative_imported,
+                        cumulative_skipped = excluded.cumulative_skipped,
+                        cumulative_failed = excluded.cumulative_failed
+                    """,
+                    [
+                        source_type,
+                        current_run,
+                        last_success,
+                        last_error,
+                        effective_last_import,
+                        last_source_identifier,
+                        discovered,
+                        imported,
+                        skipped,
+                        failed,
+                        backlog,
+                        cumulative_discovered,
+                        cumulative_imported,
+                        cumulative_skipped,
+                        cumulative_failed,
+                    ],
+                )
+
+            source_status = self.get_source_status(source_type)
+            if source_status is None:
+                raise ValueError(f"Failed to persist import source status for '{source_type}'.")
+            return source_status
 
     def get_source_status(self, source_type: str) -> ImportSourceStatus | None:
         """Return persisted status for one import source."""

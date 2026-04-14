@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -443,6 +444,88 @@ def test_storage_summary_supports_rolling_window(tmp_path: Path) -> None:
     assert all_time.failure_events == 1
     assert recent.failure_events == 0
     assert recent.total_events == 1
+
+
+def test_storage_serializes_concurrent_writes_from_multiple_threads(tmp_path: Path) -> None:
+    """Concurrent ingest and import-batch writers should not lose or corrupt rows.
+
+    The FastAPI ingest endpoint runs in the threadpool while the import worker
+    writes from a background thread.  The repository write lock must serialize
+    these paths so every event is persisted exactly once.
+    """
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+
+    def make_event(index: int) -> EventRecord:
+        hours, minutes = divmod(index, 60)
+        return EventRecord.model_validate(
+            {
+                "timestampUtc": f"2026-04-09T{hours:02d}:{minutes:02d}:00Z",
+                "agentId": f"branch-{index:03d}",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "ping",
+                "probeName": "Ping.Primary",
+                "result": "SUCCESS",
+                "latencyMs": 1.0 + index,
+                "loss": 0.0,
+                "errorCode": None,
+                "details": "Reply from 10.10.20.15",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        )
+
+    def ingest_one(index: int) -> int:
+        return repository.ingest_events([make_event(index)])
+
+    def import_batch_one(index: int) -> int:
+        return repository.ingest_import_batch(
+            source_type="local",
+            source_identifier=f"cycle-{index:03d}.jsonl",
+            fingerprint=f"fp-{index:03d}",
+            events=[make_event(index + 100)],
+        )
+
+    def record_status_one(index: int) -> None:
+        repository.record_import_source_status(
+            source_type="local",
+            discovered=1,
+            imported=1,
+            skipped=0,
+            failed=0,
+            backlog=0,
+            last_error=None,
+            last_source_identifier=f"cycle-{index:03d}.jsonl",
+            mark_success=True,
+            last_imported_batch_utc=None,
+        )
+
+    total_ingest = 20
+    total_batches = 10
+    total_status_writes = 5
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        ingest_futures = [pool.submit(ingest_one, index) for index in range(total_ingest)]
+        batch_futures = [pool.submit(import_batch_one, index) for index in range(total_batches)]
+        status_futures = [
+            pool.submit(record_status_one, index) for index in range(total_status_writes)
+        ]
+
+        for future in ingest_futures + batch_futures + status_futures:
+            future.result()
+
+    summary = repository.get_fleet_summary()
+
+    assert summary.total_events == total_ingest + total_batches
+    status = repository.get_import_status("local")
+    assert status.sources[0].cumulative_imported == total_status_writes
 
 
 def test_storage_normalizes_timestamps_to_utc(tmp_path: Path) -> None:
