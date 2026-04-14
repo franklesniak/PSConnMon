@@ -36,7 +36,7 @@ path visualization, and centralized views.
 - **Domain Auth Health** — Optional Linux Kerberos ticket validation for domain
   infrastructure targets
 - **Traceroute / Path Tracking** — Hop-by-hop path capture for route-change and
-  latency analysis
+  latency analysis, plus a summary event for dashboard health/state
 - **Structured Batch Logging** — JSONL spool files for local retention, replay,
   and upload
 - **Optional CSV Mirror** — CSV output for operators that still want flat-file
@@ -190,6 +190,7 @@ The current file/object configuration model supports these main option groups:
   `publish.azure.sasToken`
 - `tests.enabled`, `tests.pingTimeoutMs`, `tests.pingPacketSize`,
   `tests.shareAccessTimeoutSeconds`, `tests.tracerouteTimeoutSeconds`,
+  `tests.tracerouteProbeTimeoutSeconds`,
   `tests.internetQualitySampleCount`
 - `auth.linuxSmbMode`, `auth.secretReference`, `auth.linuxProfiles[].id`,
   `auth.linuxProfiles[].mode`, `auth.linuxProfiles[].secretReference`
@@ -201,6 +202,12 @@ The current file/object configuration model supports these main option groups:
 probe. It validates Linux Kerberos auth health for the target's effective Linux
 auth profile. `domainAuth` is meaningful only for Linux collectors.
 
+Traceroute timing uses two controls:
+
+- `tests.tracerouteTimeoutSeconds` bounds the overall PSConnMon traceroute job.
+- `tests.tracerouteProbeTimeoutSeconds` is the per-hop wait passed to
+  `traceroute -w` on Linux and `tracert -w` on Windows.
+
 `auth.linuxProfiles[]` supports these Linux auth modes:
 
 - `currentContext` for an existing Kerberos context on the host
@@ -211,6 +218,10 @@ auth profile. `domainAuth` is meaningful only for Linux collectors.
 config directory or `<spoolDirectory>/secrets`. Secret files are local-only
 inputs and are not intended to be delivered inline through YAML, JSON, or
 Azure-hosted config blobs.
+
+On Windows, the built-in share probe uses the current Windows security context
+for UNC access. Explicit per-share username/password handling is currently
+supported only for Linux SMB probes through `auth.linuxProfiles[]`.
 
 Built-in Linux secret-file contracts are:
 

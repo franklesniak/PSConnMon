@@ -2,7 +2,7 @@
 
 - **Status:** Active
 - **Owner:** Repository Maintainers
-- **Last Updated:** 2026-04-09
+- **Last Updated:** 2026-04-13
 - **Scope:** Defines first-response troubleshooting steps for PSConnMon monitor
   and reporting service issues. Does not define postmortem policy.
 - **Related:** [Architecture](../spec/architecture.md), [README](../../README.md), [Demo Runbook](demo.md)
@@ -43,5 +43,8 @@
 - Missing `kinit` or `klist` should surface as `SKIPPED` for Linux Kerberos
   workflows, not a process crash.
 - Share failures should not block ping, DNS, traceroute, or internet-quality probes.
+- Manual `tracert` success does not guarantee collector success if the overall
+  traceroute job timeout is too low. Compare `tests.tracerouteTimeoutSeconds`
+  with `tests.tracerouteProbeTimeoutSeconds`, especially on Windows.
 - Dashboard gaps usually indicate import, ingest, or timestamp issues before they indicate query problems.
 - Route visualization anomalies usually indicate missing traceroute events or inconsistent path hashes.

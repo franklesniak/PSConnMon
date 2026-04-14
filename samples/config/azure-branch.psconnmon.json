@@ -36,7 +36,8 @@
     "pingTimeoutMs": 3000,
     "pingPacketSize": 56,
     "shareAccessTimeoutSeconds": 15,
-    "tracerouteTimeoutSeconds": 20,
+    "tracerouteTimeoutSeconds": 60,
+    "tracerouteProbeTimeoutSeconds": 3,
     "internetQualitySampleCount": 5
   },
   "auth": {

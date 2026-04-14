@@ -19,7 +19,7 @@
     },
     "tests": {
       "type": "object",
-      "required": ["enabled", "pingTimeoutMs", "pingPacketSize", "shareAccessTimeoutSeconds", "tracerouteTimeoutSeconds", "internetQualitySampleCount"]
+      "required": ["enabled", "pingTimeoutMs", "pingPacketSize", "shareAccessTimeoutSeconds", "tracerouteTimeoutSeconds", "tracerouteProbeTimeoutSeconds", "internetQualitySampleCount"]
     },
     "auth": {
       "type": "object",

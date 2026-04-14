@@ -294,7 +294,8 @@ tests:
   pingTimeoutMs: 3000
   pingPacketSize: 56
   shareAccessTimeoutSeconds: 15
-  tracerouteTimeoutSeconds: 20
+  tracerouteTimeoutSeconds: 60
+  tracerouteProbeTimeoutSeconds: 3
   internetQualitySampleCount: 5
 auth:
   linuxProfiles:
@@ -344,6 +345,12 @@ share requires explicit SMB credentials, validate it from the Linux collector
 with `auth.linuxProfiles[]`, or pre-provision Windows access for the scheduled
 task identity outside PSConnMon.
 
+Traceroute timing also uses two knobs. `tests.tracerouteTimeoutSeconds` is the
+overall PSConnMon timeout for the full traceroute job, while
+`tests.tracerouteProbeTimeoutSeconds` is the per-hop wait passed to the native
+traceroute command. Keep the per-hop value much lower than the overall timeout,
+especially on Windows.
+
 If you stay on Windows PowerShell 5.1, prefer JSON for the config file. If you
 run PowerShell 7 with YAML support, the YAML form below is also valid. When you
 switch to JSON, keep the local filename and `publish.azure.configBlobPath`
@@ -383,7 +390,8 @@ tests:
   pingTimeoutMs: 3000
   pingPacketSize: 56
   shareAccessTimeoutSeconds: 15
-  tracerouteTimeoutSeconds: 20
+  tracerouteTimeoutSeconds: 60
+  tracerouteProbeTimeoutSeconds: 3
   internetQualitySampleCount: 5
 auth:
   linuxSmbMode: currentContext

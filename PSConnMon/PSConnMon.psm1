@@ -1614,6 +1614,7 @@ function Test-PSConnMonConfig {
             pingPacketSize = 56
             shareAccessTimeoutSeconds = 15
             tracerouteTimeoutSeconds = 20
+            tracerouteProbeTimeoutSeconds = 3
             internetQualitySampleCount = 4
         }
         auth = @{
@@ -1879,6 +1880,7 @@ function Export-PSConnMonSampleConfig {
             pingPacketSize = 56
             shareAccessTimeoutSeconds = 15
             tracerouteTimeoutSeconds = 20
+            tracerouteProbeTimeoutSeconds = 3
             internetQualitySampleCount = 4
         }
         auth = @{
@@ -2659,7 +2661,7 @@ function Test-PSConnMonTraceroute {
         if ($script:PSConnMonIsWindows) {
             $jobValue = Start-ThreadJob -ScriptBlock {
                 tracert -d -w ($args[1] * 1000) $args[0] 2>&1
-            } -ArgumentList $traceTarget, ([int]$Config.tests.tracerouteTimeoutSeconds)
+            } -ArgumentList $traceTarget, ([int]$Config.tests.tracerouteProbeTimeoutSeconds)
         } else {
             if (-not (Get-Command -Name traceroute -ErrorAction SilentlyContinue)) {
                 return @(
@@ -2672,7 +2674,7 @@ function Test-PSConnMonTraceroute {
 
             $jobValue = Start-ThreadJob -ScriptBlock {
                 traceroute -n -w $args[1] $args[0] 2>&1
-            } -ArgumentList $traceTarget, ([int]$Config.tests.tracerouteTimeoutSeconds)
+            } -ArgumentList $traceTarget, ([int]$Config.tests.tracerouteProbeTimeoutSeconds)
         }
 
         if (-not (Wait-Job -Job $jobValue -Timeout ([int]$Config.tests.tracerouteTimeoutSeconds))) {

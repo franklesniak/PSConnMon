@@ -1,6 +1,6 @@
 schemaVersion: '1.0'
 agent:
-  agentId: pi-branch-01
+  agentId: ubuntu-branch-01
   siteId: branch-a
   spoolDirectory: /var/lib/psconnmon/spool
   batchSize: 250
@@ -32,7 +32,8 @@ tests:
   pingTimeoutMs: 3000
   pingPacketSize: 56
   shareAccessTimeoutSeconds: 15
-  tracerouteTimeoutSeconds: 20
+  tracerouteTimeoutSeconds: 120
+  tracerouteProbeTimeoutSeconds: 3
   internetQualitySampleCount: 5
 auth:
   linuxProfiles:

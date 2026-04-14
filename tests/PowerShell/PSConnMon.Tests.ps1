@@ -42,6 +42,7 @@ function script:New-PSConnMonTestConfig {
             pingPacketSize = 56
             shareAccessTimeoutSeconds = 15
             tracerouteTimeoutSeconds = 20
+            tracerouteProbeTimeoutSeconds = 3
             internetQualitySampleCount = 4
         }
         auth = @{
