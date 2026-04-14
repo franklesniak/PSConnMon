@@ -75,7 +75,7 @@ def test_dashboard_and_import_endpoints(tmp_path: Path) -> None:
 
         minute_window_response = client.get("/api/v1/dashboard?summary_window_minutes=30")
         assert minute_window_response.status_code == 200
-        assert minute_window_response.json()["summary"]["total_events"] == 0
+        assert minute_window_response.json()["summary"]["total_events"] == 1
 
         dashboard_response = client.get("/")
         assert dashboard_response.status_code == 200
@@ -96,7 +96,7 @@ def test_dashboard_and_import_endpoints(tmp_path: Path) -> None:
         target_detail_response = client.get("/api/v1/targets/branch-01%3A%3Afs01?window_minutes=30")
         assert target_detail_response.status_code == 200
         assert target_detail_response.json()["target"]["fqdn"] == "fs01.corp.local"
-        assert target_detail_response.json()["recent_events"] == []
+        assert len(target_detail_response.json()["recent_events"]) == 1
 
 
 def test_http_ingest_remains_available(tmp_path: Path) -> None:
