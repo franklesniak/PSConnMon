@@ -167,9 +167,6 @@ targets:
       - dns
       - domainAuth
       - share
-      - internetQuality
-      - traceroute
-    externalTraceTarget: 1.1.1.1
   - id: fileshare01
     fqdn: fileshare01.branch.local
     address: 10.20.30.40
@@ -186,8 +183,19 @@ targets:
     tests:
       - ping
       - share
+internetTargets:
+  - id: internet-cloudflare
+    name: Cloudflare DNS
+    address: 1.1.1.1
+    tests:
+      - internetQuality
       - traceroute
-    externalTraceTarget: 8.8.8.8
+  - id: internet-google
+    name: Google DNS
+    address: 8.8.8.8
+    tests:
+      - internetQuality
+      - traceroute
 ```
 
 ## Step 3: Build the Collector Configs
@@ -287,7 +295,8 @@ Credential material **MUST** stay local to the collector:
 
 For the summit topology, keep the target-level domain controller profile on
 `dc01` as `kerberosKeytab`, then override only the non-domain share with a
-`usernamePassword` profile.
+`usernamePassword` profile. Keep internet probes in `internetTargets[]` so the
+dashboard can query them separately from host reachability.
 
 ```yaml
 schemaVersion: '1.0'
@@ -346,8 +355,7 @@ targets:
     shares:
       - id: sysvol
         path: '\\dc01.corp.example.com\SYSVOL'
-    tests: [ping, dns, domainAuth, share, internetQuality, traceroute]
-    externalTraceTarget: 1.1.1.1
+    tests: [ping, dns, domainAuth, share]
   - id: fileshare01
     fqdn: fileshare01.branch.local
     address: 10.20.30.40
@@ -358,8 +366,16 @@ targets:
       - id: public
         path: '\\fileshare01\Public'
         linuxProfileId: fileshare-creds
-    tests: [ping, share, traceroute]
-    externalTraceTarget: 8.8.8.8
+    tests: [ping, share]
+internetTargets:
+  - id: internet-cloudflare
+    name: Cloudflare DNS
+    address: 1.1.1.1
+    tests: [internetQuality, traceroute]
+  - id: internet-google
+    name: Google DNS
+    address: 8.8.8.8
+    tests: [internetQuality, traceroute]
 extensions: []
 ```
 
@@ -436,8 +452,7 @@ targets:
     shares:
       - id: sysvol
         path: '\\dc01.corp.example.com\SYSVOL'
-    tests: [ping, dns, share, internetQuality, traceroute]
-    externalTraceTarget: 1.1.1.1
+    tests: [ping, dns, share]
   - id: fileshare01
     fqdn: fileshare01.branch.local
     address: 10.20.30.40
@@ -447,8 +462,16 @@ targets:
     shares:
       - id: public
         path: '\\fileshare01\Public'
-    tests: [ping, share, traceroute]
-    externalTraceTarget: 8.8.8.8
+    tests: [ping, share]
+internetTargets:
+  - id: internet-cloudflare
+    name: Cloudflare DNS
+    address: 1.1.1.1
+    tests: [internetQuality, traceroute]
+  - id: internet-google
+    name: Google DNS
+    address: 8.8.8.8
+    tests: [internetQuality, traceroute]
 extensions: []
 ```
 
@@ -824,9 +847,11 @@ Expected results:
 Open `http://<linux-host>:8080/` and confirm:
 
 - Both agents are visible in the fleet view.
-- The `dc01` and `fileshare01` targets appear in the target explorer.
-- Target detail for `dc01` shows `domainAuth`, DNS, ping, share, and traceroute
-  data.
+- Internal targets list shows `dc01` and `fileshare01`.
+- Internet targets list shows `internet-cloudflare` and `internet-google`.
+- Target detail for `dc01` shows `domainAuth`, DNS, ping, and share data.
+- Target detail for an internet target shows `internetQuality`, traceroute
+  summary, recent hop events, and path history.
 - Target detail for `fileshare01` shows SMB share results from the Linux
   collector, the Windows collector, or both.
 

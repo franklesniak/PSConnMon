@@ -97,10 +97,20 @@ $targets = @(
     }
 )
 
+$internetTargets = @(
+    @{
+        id = 'internet-cloudflare'
+        name = 'Cloudflare DNS'
+        address = '1.1.1.1'
+        tests = @('internetQuality', 'traceroute')
+    }
+)
+
 .\Watch-Network.ps1 `
     -Targets $targets `
+    -InternetTargets $internetTargets `
     -Agent @{ agentId = 'ops-01'; siteId = 'lab'; spoolDirectory = 'data/spool' } `
-    -Tests @{ enabled = @('ping') } `
+    -Tests @{ enabled = @('ping', 'internetQuality', 'traceroute') } `
     -RunOnce
 ```
 
@@ -117,6 +127,7 @@ spool directory.
 | --- | --- | --- | --- |
 | `ConfigPath` | Yes (config mode) | — | YAML or JSON config file |
 | `Targets` | Yes (object mode) | — | Array of target objects matching the `targets` config section |
+| `InternetTargets` | No | `@()` | Array of internet target objects matching the `internetTargets` config section |
 | `Agent` | No | Defaults applied | Object matching the `agent` config section |
 | `Publish` | No | Defaults applied | Object matching the `publish` config section |
 | `Tests` | No | Defaults applied | Object matching the `tests` config section |
@@ -156,14 +167,25 @@ the file-based config:
 | --- | --- | --- |
 | `id` | Yes | Stable target identifier |
 | `fqdn` | Yes | Hostname used for DNS and reporting |
-| `address` | Yes | IP address or probe target address |
+| `address` | Yes | Host address used for host-scoped probes such as ping, DNS, and share |
 | `tests` | No | Enabled tests for the target |
 | `dnsServers` | No | DNS servers to query for DNS probes |
 | `shares` | No | Share definitions with `id` and `path` |
 | `linuxProfileId` | No | Default Linux auth profile id for target-scoped SMB and `domainAuth` probes |
 | `roles` | No | Informational target roles |
 | `tags` | No | Informational tags |
-| `externalTraceTarget` | No | Address used for internet-quality and traceroute probes |
+
+When using `-InternetTargets`, each internet target object should match the
+dedicated `internetTargets` section in the file-based config:
+
+| Property | Required | Description |
+| --- | --- | --- |
+| `id` | Yes | Stable internet target identifier |
+| `address` | Yes | Internet probe address used for `internetQuality` and `traceroute` |
+| `name` | No | Display name used in reporting |
+| `tests` | No | Enabled tests for the internet target |
+| `roles` | No | Informational roles |
+| `tags` | No | Informational tags |
 
 Top-level object parameters align to the same config sections:
 
@@ -173,6 +195,7 @@ Top-level object parameters align to the same config sections:
 | `-Publish` | Local/Azure publish behavior and CSV mirror settings |
 | `-Tests` | Global probe settings such as timeouts and sample counts |
 | `-Auth` | Authentication-related options such as Linux SMB profiles |
+| `-InternetTargets` | Dedicated internet probe targets scoped to the agent rather than to an internal host |
 | `-Extensions` | Trusted local extension probes referenced by file path |
 
 ### File Config Options
@@ -195,12 +218,20 @@ The current file/object configuration model supports these main option groups:
 - `auth.linuxSmbMode`, `auth.secretReference`, `auth.linuxProfiles[].id`,
   `auth.linuxProfiles[].mode`, `auth.linuxProfiles[].secretReference`
 - `targets[].linuxProfileId`, `targets[].shares[].linuxProfileId`
+- `internetTargets[].id`, `internetTargets[].name`,
+  `internetTargets[].address`, `internetTargets[].tests`,
+  `internetTargets[].roles`, `internetTargets[].tags`
 - `extensions[].id`, `extensions[].path`, `extensions[].entryPoint`,
   `extensions[].enabled`, `extensions[].targets`
 
 `tests.enabled` and `targets[].tests` may include the built-in `domainAuth`
 probe. It validates Linux Kerberos auth health for the target's effective Linux
 auth profile. `domainAuth` is meaningful only for Linux collectors.
+
+`internetQuality` and `traceroute` SHOULD be assigned to `internetTargets[]`
+instead of internal `targets[]`. Each internet target is treated as its own
+reported entity, which keeps fleet views and drilldowns separate from internal
+host health.
 
 Traceroute timing uses two controls:
 

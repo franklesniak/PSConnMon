@@ -14,6 +14,10 @@
 # An array of target objects that map directly to the PSConnMon `targets`
 # section.
 #
+# .PARAMETER InternetTargets
+# Optional array of internet target objects that map directly to the
+# PSConnMon `internetTargets` section.
+#
 # .PARAMETER Agent
 # Optional object for `agent` section values when using `-Targets`.
 #
@@ -51,6 +55,14 @@
 #           tests = @('ping')
 #       }
 #   ) `
+#   -InternetTargets @(
+#       @{
+#           id = 'internet-cloudflare'
+#           name = 'Cloudflare DNS'
+#           address = '1.1.1.1'
+#           tests = @('internetQuality', 'traceroute')
+#       }
+#   ) `
 #   -Agent @{ agentId = 'ops-01'; siteId = 'lab'; spoolDirectory = 'data/spool' } `
 #   -Tests @{ enabled = @('ping') } `
 #   -RunOnce
@@ -79,6 +91,9 @@ param(
     [object[]]$Targets,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ObjectInput')]
+    [AllowEmptyCollection()][object[]]$InternetTargets = @(),
+
+    [Parameter(Mandatory = $false, ParameterSetName = 'ObjectInput')]
     [AllowNull()][object]$Agent = $null,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ObjectInput')]
@@ -104,7 +119,7 @@ $modulePath = Join-Path -Path $PSScriptRoot -ChildPath 'PSConnMon/PSConnMon.psd1
 Import-Module -Name $modulePath -Force -ErrorAction Stop
 
 if ($PSCmdlet.ParameterSetName -eq 'ObjectInput') {
-    $config = ConvertTo-PSConnMonConfig -Targets $Targets -Agent $Agent -Publish $Publish -Tests $Tests -Auth $Auth -Extensions $Extensions
+    $config = ConvertTo-PSConnMonConfig -Targets $Targets -InternetTargets $InternetTargets -Agent $Agent -Publish $Publish -Tests $Tests -Auth $Auth -Extensions $Extensions
     $exitCode = Invoke-PSConnMon -Config $config -RunOnce:$RunOnce -MaxRuntimeMinutes $MaxRuntimeMinutes
     exit $exitCode
 }

@@ -120,6 +120,7 @@ class TargetSummary(CompatBaseModel):
     """Aggregated state for one target."""
 
     target_id: str
+    target_kind: str = Field(alias="targetKind")
     agent_id: str
     fqdn: str
     site_id: str
@@ -134,8 +135,10 @@ class PathSummary(CompatBaseModel):
     """Traceroute/path-change summary for one target."""
 
     target_id: str
+    target_kind: str = Field(alias="targetKind")
     fqdn: str
     path_hash: str
+    path_preview: str = Field(alias="pathPreview")
     last_seen_utc: datetime | None
     hop_count: int
     average_hop_latency_ms: float | None
@@ -190,19 +193,54 @@ class PathChangeSummary(CompatBaseModel):
     """A detected traceroute path transition for one target."""
 
     target_id: str
+    target_kind: str = Field(alias="targetKind")
     fqdn: str
     site_id: str
     agent_id: str
     previous_path_hash: str
+    previous_path_preview: str = Field(alias="previousPathPreview")
     path_hash: str
+    path_preview: str = Field(alias="pathPreview")
     hop_count: int
     timestamp_utc: datetime
+
+
+class TestSummary(CompatBaseModel):
+    """Current state summary for one test assigned to a target."""
+
+    test_type: str
+    latest_result: str
+    latest_probe_name: str = Field(alias="latestProbeName")
+    latest_target_address: str = Field(alias="latestTargetAddress")
+    last_latency_ms: float | None = Field(alias="lastLatencyMs")
+    last_timestamp_utc: datetime | None = Field(alias="lastTimestampUtc")
+    event_count: int = Field(alias="eventCount")
+
+
+class TargetEventSummary(CompatBaseModel):
+    """Recent event record used for target drilldown rendering."""
+
+    timestamp_utc: datetime = Field(alias="timestampUtc")
+    test_type: str = Field(alias="testType")
+    probe_name: str = Field(alias="probeName")
+    result: str
+    target_address: str = Field(alias="targetAddress")
+    latency_ms: float | None = Field(default=None, alias="latencyMs")
+    error_code: str | None = Field(default=None, alias="errorCode")
+    details: str = ""
+    dns_server: str | None = Field(default=None, alias="dnsServer")
+    path_hash: str | None = Field(default=None, alias="pathHash")
+    hop_index: int | None = Field(default=None, alias="hopIndex")
+    hop_address: str | None = Field(default=None, alias="hopAddress")
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class TargetDetail(CompatBaseModel):
     """Detailed drilldown payload for one target."""
 
     target: TargetSummary
+    tests: list[TestSummary]
+    recent_events: list[TargetEventSummary] = Field(alias="recentEvents")
     latency_series: list[LatencyPoint]
     incidents: list[IncidentSummary]
     paths: list[PathSummary]

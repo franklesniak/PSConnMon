@@ -2,7 +2,7 @@
 
 - **Status:** Active
 - **Owner:** Repository Maintainers
-- **Last Updated:** 2026-04-09
+- **Last Updated:** 2026-04-13
 - **Scope:** Defines product requirements and roadmap mapping for the PSConnMon
   monitor and reporting service. Does not cover release notes.
 - **Related:** [Architecture](architecture.md), [ADR-0001](../adr/ADR-0001-agent-service-architecture.md), [Roadmap](../../PSConnMon_Roadmap.md)
@@ -30,10 +30,12 @@ and end-to-end agent execution.
 ### PSCONNMON-REQ-002
 
 The system **MUST** use a structured configuration model with top-level sections
-`agent`, `publish`, `tests`, `auth`, `targets`, and `extensions`.
+`agent`, `publish`, `tests`, `auth`, `targets`, `internetTargets`, and
+`extensions`.
 
 - **Rationale:** The roadmap requires structured configuration, multiple targets,
-  and command-and-control.
+  and command-and-control. Internal hosts and internet probe destinations have
+  different operator meaning and **SHOULD NOT** be conflated.
 - **Roadmap Mapping:** `Input Model Improvements > JSON-Based Input`,
   `Default Target Behavior`
 - **Verification:** Schema file review, PowerShell validation tests, and Python
@@ -79,6 +81,10 @@ experience.
   PingPlotter-style reporting surface.
 - **Roadmap Mapping:** `Visualization & Reporting`
 - **Verification:** pytest API, storage, and dashboard tests.
+
+The dashboard **MUST** render internal monitored hosts and internet targets as
+separate queryable entities, and **MUST** support per-target drilldown into the
+tests assigned to that target.
 
 ### PSCONNMON-REQ-007
 

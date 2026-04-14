@@ -17,7 +17,7 @@ publish:
     enabled: true
     accountName: psconnmondemo01
     containerName: telemetry
-    blobPrefix: events
+    blobPrefix: events-v2
     configBlobPath: configs/win-branch-01.psconnmon.yaml
     authMode: sasToken
     sasToken: 'sp=racwdl&st=2026-04-13T20:52:42Z&se=2026-04-17T05:07:42Z&spr=https&sv=2025-11-05&sr=c&sig=IjTiTM%2BFSBNBhoUs6l7kblXcmhiSXdi4qxmAjmzRO4I%3D'
@@ -47,8 +47,7 @@ targets:
     shares:
       - id: sysvol
         path: '\\FISHDC01.INTERNAL.BLAKECHERRY.COM\SYSVOL'
-    tests: [ping, dns, share, internetQuality, traceroute]
-    externalTraceTarget: 1.1.1.1
+    tests: [ping, dns, share]
   - id: BlakeR710
     fqdn: Blake-R710.local
     address: 10.0.100.10
@@ -58,6 +57,14 @@ targets:
     shares:
       - id: public
         path: '\\10.0.100.10\isos'
-    tests: [ping, share, traceroute]
-    externalTraceTarget: 8.8.8.8
+    tests: [ping, share]
+internetTargets:
+  - id: internet-cloudflare
+    name: Cloudflare DNS
+    address: 1.1.1.1
+    tests: [internetQuality, traceroute]
+  - id: internet-google
+    name: Google DNS
+    address: 8.8.8.8
+    tests: [internetQuality, traceroute]
 extensions: []

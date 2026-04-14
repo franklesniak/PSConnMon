@@ -2,7 +2,7 @@
 
 - **Status:** Active
 - **Owner:** Repository Maintainers
-- **Last Updated:** 2026-04-09
+- **Last Updated:** 2026-04-13
 - **Scope:** Defines the recommended validation and demonstration flow for
   PSConnMon. Does not define incident-response policy.
 - **Related:** [Requirements](../spec/requirements.md), [Architecture](../spec/architecture.md), [README](../../README.md)
@@ -25,12 +25,14 @@ containerized reporting surface with PingPlotter-style path awareness.
 3. Start the reporting service with `docker compose up --build` or `python -m psconnmon_service`.
 4. Drop one or more `.jsonl` batches under the configured local import path or
    trigger `POST /api/v1/import/run`.
-5. Open the dashboard and walk through summary, target detail, path history,
-   incident views, and import freshness.
+5. Open the dashboard and walk through summary, separate internal/internet
+   target views, target detail, path history, incident views, and import
+   freshness.
 
 ## Walkthrough
 
-1. Show the YAML or JSON config and explain the multi-target model.
+1. Show the YAML or JSON config and explain the split between internal
+   `targets` and agent-scoped `internetTargets`.
 2. Show a live or seeded local-directory import, then optionally show the manual
    HTTP ingest path for testing.
 3. Highlight route and latency changes using the built-in dashboard.

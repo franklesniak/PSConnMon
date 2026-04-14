@@ -62,11 +62,19 @@
       "shares": [],
       "tests": [
         "ping",
-        "dns",
+        "dns"
+      ]
+    }
+  ],
+  "internetTargets": [
+    {
+      "id": "internet-google",
+      "name": "Google DNS",
+      "address": "8.8.8.8",
+      "tests": [
         "internetQuality",
         "traceroute"
-      ],
-      "externalTraceTarget": "8.8.8.8"
+      ]
     }
   ],
   "extensions": []

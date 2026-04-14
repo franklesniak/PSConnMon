@@ -69,11 +69,8 @@
       "tests": [
         "ping",
         "dns",
-        "share",
-        "internetQuality",
-        "traceroute"
-      ],
-      "externalTraceTarget": "8.8.8.8"
+        "share"
+      ]
     },
     {
       "id": "dc01",
@@ -91,11 +88,28 @@
       "shares": [],
       "tests": [
         "ping",
-        "dns",
+        "dns"
+      ]
+    }
+  ],
+  "internetTargets": [
+    {
+      "id": "internet-google",
+      "name": "Google DNS",
+      "address": "8.8.8.8",
+      "tests": [
         "internetQuality",
         "traceroute"
-      ],
-      "externalTraceTarget": "1.1.1.1"
+      ]
+    },
+    {
+      "id": "internet-cloudflare",
+      "name": "Cloudflare DNS",
+      "address": "1.1.1.1",
+      "tests": [
+        "internetQuality",
+        "traceroute"
+      ]
     }
   ],
   "extensions": []

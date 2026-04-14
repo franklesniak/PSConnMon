@@ -71,8 +71,10 @@ def test_dashboard_and_import_endpoints(tmp_path: Path) -> None:
 
         dashboard_response = client.get("/")
         assert dashboard_response.status_code == 200
+        assert "PSConnMon Fleet Board" in dashboard_response.text
         assert "Agent Fleet" in dashboard_response.text
-        assert "Target Explorer" in dashboard_response.text
+        assert "Internal Targets" in dashboard_response.text
+        assert "Internet Targets" in dashboard_response.text
 
         agents_response = client.get("/api/v1/agents")
         assert agents_response.status_code == 200

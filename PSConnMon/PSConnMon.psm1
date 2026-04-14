@@ -267,9 +267,14 @@ function ConvertTo-PSConnMonConfig {
     # command-line parameter.
     #
     # .PARAMETER Targets
-    # An array of target objects. Each target must provide `id`, `fqdn`, and
-    # `address`. Optional properties include `dnsServers`, `shares`, `tests`,
-    # `roles`, `tags`, and `externalTraceTarget`.
+    # An array of internal target objects. Each target must provide `id`,
+    # `fqdn`, and `address`. Optional properties include `dnsServers`,
+    # `shares`, `tests`, `roles`, and `tags`.
+    #
+    # .PARAMETER InternetTargets
+    # Optional array of internet target objects. Each internet target must
+    # provide `id` and `address`. Optional properties include `name`, `tests`,
+    # `roles`, and `tags`.
     #
     # .PARAMETER Agent
     # Optional object containing `agent` section values.
@@ -294,6 +299,13 @@ function ConvertTo-PSConnMonConfig {
     #         address = '127.0.0.1'
     #         tests = @('ping')
     #     }
+    # ) -InternetTargets @(
+    #     @{
+    #         id = 'internet-cloudflare'
+    #         name = 'Cloudflare DNS'
+    #         address = '1.1.1.1'
+    #         tests = @('internetQuality', 'traceroute')
+    #     }
     # ) -Agent @{
     #     agentId = 'ops-01'
     #     siteId = 'lab'
@@ -315,6 +327,7 @@ function ConvertTo-PSConnMonConfig {
     [OutputType([hashtable])]
     param(
         [Parameter(Mandatory = $true)][object[]]$Targets,
+        [Parameter(Mandatory = $false)][AllowEmptyCollection()][object[]]$InternetTargets = @(),
         [Parameter(Mandatory = $false)][AllowNull()][object]$Agent = $null,
         [Parameter(Mandatory = $false)][AllowNull()][object]$Publish = $null,
         [Parameter(Mandatory = $false)][AllowNull()][object]$Tests = $null,
@@ -325,6 +338,11 @@ function ConvertTo-PSConnMonConfig {
     $targetValues = New-Object System.Collections.Generic.List[object]
     foreach ($targetValue in $Targets) {
         $targetValues.Add((ConvertTo-PSConnMonHashtable -InputObject $targetValue)) | Out-Null
+    }
+
+    $internetTargetValues = New-Object System.Collections.Generic.List[object]
+    foreach ($internetTargetValue in (ConvertTo-PSConnMonArray -InputObject $InternetTargets)) {
+        $internetTargetValues.Add((ConvertTo-PSConnMonHashtable -InputObject $internetTargetValue)) | Out-Null
     }
 
     $extensionValues = New-Object System.Collections.Generic.List[object]
@@ -339,6 +357,7 @@ function ConvertTo-PSConnMonConfig {
         tests = if ($null -eq $Tests) { @{} } else { ConvertTo-PSConnMonHashtable -InputObject $Tests }
         auth = if ($null -eq $Auth) { @{} } else { ConvertTo-PSConnMonHashtable -InputObject $Auth }
         targets = $targetValues.ToArray()
+        internetTargets = $internetTargetValues.ToArray()
         extensions = $extensionValues.ToArray()
         _runtime = @{
             configDirectory = (Get-Location).Path
@@ -645,6 +664,44 @@ function Get-PSConnMonEventRecord {
     }
 
     return [pscustomobject]$eventValue
+}
+
+function Get-PSConnMonInternetProbeAddress {
+    # .SYNOPSIS
+    # Resolves the address used for internet-facing probes.
+    #
+    # .DESCRIPTION
+    # Returns the internet probe address for a normalized target. External
+    # internet targets probe their own `address`, while legacy internal targets
+    # can still provide `externalTraceTarget` for backward compatibility.
+    #
+    # .PARAMETER Target
+    # The normalized target definition.
+    #
+    # .OUTPUTS
+    # System.String. The internet probe destination.
+
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Target
+    )
+
+    if (
+        $Target.ContainsKey('targetKind') -and
+        ([string]$Target.targetKind -eq 'external')
+    ) {
+        return [string]$Target.address
+    }
+
+    if (
+        $Target.ContainsKey('externalTraceTarget') -and
+        (-not [string]::IsNullOrWhiteSpace([string]$Target.externalTraceTarget))
+    ) {
+        return [string]$Target.externalTraceTarget
+    }
+
+    return [string]$Target.address
 }
 
 function Get-PSConnMonConfigDirectory {
@@ -1623,11 +1680,13 @@ function Test-PSConnMonConfig {
             linuxProfiles = @()
         }
         targets = @()
+        internetTargets = @()
         extensions = @()
     }
 
     $normalizedConfig = Merge-PSConnMonHashtable -DefaultValue $defaultConfig -OverrideValue $Config
     $normalizedConfig.targets = ConvertTo-PSConnMonArray -InputObject $normalizedConfig.targets
+    $normalizedConfig.internetTargets = ConvertTo-PSConnMonArray -InputObject $normalizedConfig.internetTargets
     $normalizedConfig.extensions = ConvertTo-PSConnMonArray -InputObject $normalizedConfig.extensions
     $normalizedConfig.tests.enabled = ConvertTo-PSConnMonArray -InputObject $normalizedConfig.tests.enabled
     $normalizedConfig.auth.linuxProfiles = ConvertTo-PSConnMonArray -InputObject $normalizedConfig.auth.linuxProfiles
@@ -1644,8 +1703,8 @@ function Test-PSConnMonConfig {
         throw 'agent.siteId is required.'
     }
 
-    if ($normalizedConfig.targets.Count -lt 1) {
-        throw 'At least one target is required.'
+    if (($normalizedConfig.targets.Count + $normalizedConfig.internetTargets.Count) -lt 1) {
+        throw 'At least one target or internetTarget is required.'
     }
 
     $linuxProfileIds = New-Object System.Collections.Generic.HashSet[string]
@@ -1674,6 +1733,7 @@ function Test-PSConnMonConfig {
     }
 
     $targetIds = New-Object System.Collections.Generic.HashSet[string]
+    $legacyInternetTargets = New-Object System.Collections.Generic.List[hashtable]
     foreach ($targetValue in $normalizedConfig.targets) {
         if ([string]::IsNullOrWhiteSpace($targetValue.id)) {
             throw 'Each target requires an id.'
@@ -1737,8 +1797,39 @@ function Test-PSConnMonConfig {
             $targetValue.tags = @()
         }
 
+        $targetValue.targetKind = 'internal'
+
         if (-not $targetValue.ContainsKey('externalTraceTarget')) {
             $targetValue.externalTraceTarget = $targetValue.address
+        }
+
+        $legacyInternetTests = @($targetValue.tests | Where-Object { $_ -in @('internetQuality', 'traceroute') })
+        $legacyTraceTarget = [string]$targetValue.externalTraceTarget
+        if (($legacyInternetTests.Count -gt 0) -or ((-not [string]::IsNullOrWhiteSpace($legacyTraceTarget)) -and ($legacyTraceTarget -ne [string]$targetValue.address))) {
+            $candidateInternetId = '{0}-internet' -f $targetValue.id
+            $counterValue = 1
+            while ($targetIds.Contains($candidateInternetId) -or ($legacyInternetTargets | Where-Object { $_.id -eq $candidateInternetId })) {
+                $counterValue++
+                $candidateInternetId = '{0}-internet-{1}' -f $targetValue.id, $counterValue
+            }
+
+            $internetAddress = if ([string]::IsNullOrWhiteSpace($legacyTraceTarget)) {
+                [string]$targetValue.address
+            } else {
+                $legacyTraceTarget
+            }
+
+            $legacyInternetTargets.Add(@{
+                id = $candidateInternetId
+                name = ('{0} Internet' -f [string]$targetValue.fqdn)
+                address = $internetAddress
+                tests = if ($legacyInternetTests.Count -gt 0) { $legacyInternetTests } else { @('internetQuality', 'traceroute') }
+                roles = @('internet')
+                tags = @('external', 'legacy-migrated')
+                targetKind = 'external'
+            }) | Out-Null
+
+            $targetValue.tests = @($targetValue.tests | Where-Object { $_ -notin @('internetQuality', 'traceroute') })
         }
 
         foreach ($shareValue in $targetValue.shares) {
@@ -1755,6 +1846,76 @@ function Test-PSConnMonConfig {
             } elseif (-not [string]::IsNullOrWhiteSpace([string]$shareValue.linuxProfileId) -and (-not $linuxProfileIds.Contains([string]$shareValue.linuxProfileId))) {
                 throw ('Share {0} for target {1} references an unknown linuxProfileId: {2}' -f $shareValue.id, $targetValue.id, $shareValue.linuxProfileId)
             }
+        }
+    }
+
+    foreach ($legacyInternetTargetValue in $legacyInternetTargets) {
+        $normalizedConfig.internetTargets += $legacyInternetTargetValue
+    }
+
+    foreach ($internetTargetValue in $normalizedConfig.internetTargets) {
+        if ([string]::IsNullOrWhiteSpace($internetTargetValue.id)) {
+            throw 'Each internetTarget requires an id.'
+        }
+
+        if (-not $targetIds.Add([string]$internetTargetValue.id)) {
+            throw ('Duplicate target or internetTarget id: {0}' -f $internetTargetValue.id)
+        }
+
+        if (-not $internetTargetValue.ContainsKey('name')) {
+            $internetTargetValue.name = ''
+        }
+
+        if ([string]::IsNullOrWhiteSpace([string]$internetTargetValue.address)) {
+            throw ('Internet target {0} requires address.' -f $internetTargetValue.id)
+        }
+
+        $internetTargetValue.fqdn = if (-not [string]::IsNullOrWhiteSpace([string]$internetTargetValue.name)) {
+            [string]$internetTargetValue.name
+        } else {
+            [string]$internetTargetValue.address
+        }
+
+        if ($internetTargetValue.ContainsKey('tests')) {
+            $internetTargetValue.tests = ConvertTo-PSConnMonArray -InputObject $internetTargetValue.tests
+        } else {
+            $internetTargetValue.tests = @('internetQuality', 'traceroute')
+        }
+
+        if ($internetTargetValue.ContainsKey('roles')) {
+            $internetTargetValue.roles = ConvertTo-PSConnMonArray -InputObject $internetTargetValue.roles
+        } else {
+            $internetTargetValue.roles = @('internet')
+        }
+
+        if ($internetTargetValue.ContainsKey('tags')) {
+            $internetTargetValue.tags = ConvertTo-PSConnMonArray -InputObject $internetTargetValue.tags
+        } else {
+            $internetTargetValue.tags = @('external')
+        }
+
+        if (-not $internetTargetValue.ContainsKey('dnsServers')) {
+            $internetTargetValue.dnsServers = @()
+        } else {
+            $internetTargetValue.dnsServers = ConvertTo-PSConnMonArray -InputObject $internetTargetValue.dnsServers
+        }
+
+        if (-not $internetTargetValue.ContainsKey('shares')) {
+            $internetTargetValue.shares = @()
+        } else {
+            $internetTargetValue.shares = ConvertTo-PSConnMonArray -InputObject $internetTargetValue.shares
+        }
+
+        if (-not $internetTargetValue.ContainsKey('linuxProfileId')) {
+            $internetTargetValue.linuxProfileId = ''
+        }
+
+        if (-not $internetTargetValue.ContainsKey('targetKind')) {
+            $internetTargetValue.targetKind = 'external'
+        }
+
+        if (-not $internetTargetValue.ContainsKey('externalTraceTarget')) {
+            $internetTargetValue.externalTraceTarget = [string]$internetTargetValue.address
         }
     }
 
@@ -1902,8 +2063,17 @@ function Export-PSConnMonSampleConfig {
                         path = '\\fs01.corp.local\Plant'
                     }
                 )
-                tests = @('ping', 'dns', 'share', 'internetQuality', 'traceroute')
-                externalTraceTarget = '8.8.8.8'
+                tests = @('ping', 'dns', 'share')
+            }
+        )
+        internetTargets = @(
+            @{
+                id = 'internet-cloudflare'
+                name = 'Cloudflare DNS'
+                address = '1.1.1.1'
+                tests = @('internetQuality', 'traceroute')
+                roles = @('internet')
+                tags = @('external', 'default')
             }
         )
         extensions = @()
@@ -2599,7 +2769,7 @@ function Test-PSConnMonInternetQuality {
         [Parameter(Mandatory = $true)][hashtable]$Config
     )
 
-    $sampleTarget = $Target.externalTraceTarget
+    $sampleTarget = Get-PSConnMonInternetProbeAddress -Target $Target
     $sampleCount = [int]$Config.tests.internetQualitySampleCount
     $latencies = New-Object System.Collections.Generic.List[double]
 
@@ -2667,7 +2837,7 @@ function Test-PSConnMonTraceroute {
 
     Assert-PSConnMonDependency -DependencyName 'ThreadJob' -DependencyType 'Module'
 
-    $traceTarget = $Target.externalTraceTarget
+    $traceTarget = Get-PSConnMonInternetProbeAddress -Target $Target
     $jobValue = $null
     try {
         if ($script:PSConnMonIsWindows) {
@@ -2771,7 +2941,14 @@ function Start-PSConnMonCycle {
     )
 
     $allEvents = New-Object System.Collections.Generic.List[object]
-    foreach ($targetValue in $Config.targets) {
+    $monitoredTargets = @()
+    if ($Config.ContainsKey('targets')) {
+        $monitoredTargets += @($Config.targets)
+    }
+    if ($Config.ContainsKey('internetTargets')) {
+        $monitoredTargets += @($Config.internetTargets)
+    }
+    foreach ($targetValue in $monitoredTargets) {
         foreach ($testName in $targetValue.tests) {
             $probeEvents = switch ($testName) {
                 'ping' { @(Test-PSConnMonPing -Target $targetValue -Config $Config) }
@@ -2806,6 +2983,34 @@ function Start-PSConnMonCycle {
             }
 
             foreach ($probeEvent in $probeEvents) {
+                $metadataValue = if (
+                    ($probeEvent.PSObject.Properties.Name -contains 'metadata') -and
+                    ($probeEvent.metadata -is [hashtable])
+                ) {
+                    $probeEvent.metadata
+                } elseif ($probeEvent.PSObject.Properties.Name -contains 'metadata') {
+                    ConvertTo-PSConnMonHashtable -InputObject $probeEvent.metadata
+                } else {
+                    @{}
+                }
+
+                if (-not $metadataValue.ContainsKey('targetKind')) {
+                    $metadataValue.targetKind = if ($targetValue.ContainsKey('targetKind')) {
+                        [string]$targetValue.targetKind
+                    } else {
+                        'internal'
+                    }
+                }
+
+                if (
+                    ($metadataValue.targetKind -eq 'external') -and
+                    (-not $metadataValue.ContainsKey('targetClass'))
+                ) {
+                    $metadataValue.targetClass = 'internet'
+                }
+
+                $probeEvent.metadata = $metadataValue
+
                 if ($PSCmdlet.ShouldProcess($BatchPath, 'Write PSConnMon cycle event')) {
                     [void](Write-PSConnMonEvent -Event $probeEvent -BatchPath $BatchPath -WriteCsvMirror:([bool]$Config.publish.csvMirror))
                     $allEvents.Add($probeEvent) | Out-Null

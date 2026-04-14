@@ -76,6 +76,20 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             padding: 28px 20px 48px;
         }
 
+        .wrap-anywhere,
+        .target-meta,
+        .badge,
+        .path-change-card dd,
+        .import-card dd,
+        .detail-panel strong,
+        .detail-panel span,
+        .target-table td,
+        .agent-card h3,
+        #detail-title {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
         .masthead {
             display: grid;
             grid-template-columns: 1.5fr 1fr;
@@ -126,8 +140,8 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
         h1 {
             font-size: clamp(2.6rem, 6vw, 4.7rem);
             line-height: 0.94;
-            max-width: 12ch;
-            margin-bottom: 14px;
+            max-width: none;
+            margin-bottom: 8px;
         }
 
         .hero-copy {
@@ -248,6 +262,14 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             margin: 6px 0 0;
             color: var(--muted);
             line-height: 1.5;
+        }
+
+        .title-band {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
         }
 
         .agent-grid {
@@ -435,6 +457,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             padding: 14px 10px 14px 0;
             border-top: 1px solid var(--line);
             vertical-align: top;
+            min-width: 0;
         }
 
         .target-meta {
@@ -529,9 +552,40 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
         }
 
         .import-grid,
-        .path-change-list {
+        .path-change-list,
+        .test-rail {
             display: grid;
             gap: 12px;
+        }
+
+        .test-rail {
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            margin-bottom: 18px;
+        }
+
+        .test-chip {
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.06);
+            color: #fff8ef;
+            padding: 12px 14px;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .test-chip.is-active {
+            background: rgba(196, 111, 43, 0.18);
+            border-color: rgba(255, 214, 176, 0.3);
+        }
+
+        .test-chip span,
+        .test-chip strong {
+            display: block;
+        }
+
+        .test-chip span {
+            margin-top: 6px;
+            font-size: 0.84rem;
         }
 
         .import-card,
@@ -643,15 +697,11 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
     <div class="shell">
         <section class="masthead">
             <article class="hero">
-                <p class="eyebrow">PSConnMon Fleet Board</p>
-                <h1>See deployed agents, target health, and path drift as it happens.</h1>
-                <p class="hero-copy">
-                    This board treats reporting agents as first-class inventory, surfaces source freshness, and
-                    keeps target drilldowns live with automatic refresh. Use the filters to isolate a site or
-                    agent, then pivot into latency and path history for the selected target.
-                </p>
-                <div class="hero-band">
+                <div class="title-band">
+                    <h1>PSConnMon Fleet Board</h1>
                     <div class="live-pill"><span class="pulse"></span><strong id="refresh-state">Live</strong></div>
+                </div>
+                <div class="hero-band">
                     <div class="site-chip"><span>Updated</span><strong id="last-refresh-label">--</strong></div>
                     <div class="site-chip"><span>Import mode</span><strong id="import-mode-label">--</strong></div>
                 </div>
@@ -671,7 +721,6 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     <div class="panel-head">
                         <div>
                             <h2>Agent Fleet</h2>
-                            <p>Agents are rendered as live reporting surfaces, not just metadata on events.</p>
                         </div>
                         <div class="badge"><span>Reporting agents</span><strong id="agent-count-label">0</strong></div>
                     </div>
@@ -681,8 +730,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 <article class="panel">
                     <div class="panel-head">
                         <div>
-                            <h2>Sites and Filters</h2>
-                            <p>Cut the board by site, agent, result, or a target name/address search.</p>
+                            <h2>Filters</h2>
                         </div>
                     </div>
                     <div class="site-rail" id="site-rail"></div>
@@ -710,10 +758,9 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 <article class="panel">
                     <div class="panel-head">
                         <div>
-                            <h2>Target Explorer</h2>
-                            <p>Click any target to open an interactive latency and path drilldown.</p>
+                            <h2>Internal Targets</h2>
                         </div>
-                        <div class="badge"><span>Visible targets</span><strong id="visible-target-count">0</strong></div>
+                        <div class="badge"><span>Visible hosts</span><strong id="internal-target-count">0</strong></div>
                     </div>
                     <table class="target-table">
                         <thead>
@@ -725,7 +772,28 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                                 <th>Last seen</th>
                             </tr>
                         </thead>
-                        <tbody id="target-table-body"></tbody>
+                        <tbody id="internal-target-table-body"></tbody>
+                    </table>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Internet Targets</h2>
+                        </div>
+                        <div class="badge"><span>Visible internet targets</span><strong id="internet-target-count">0</strong></div>
+                    </div>
+                    <table class="target-table">
+                        <thead>
+                            <tr>
+                                <th>Target</th>
+                                <th>Agent / Site</th>
+                                <th>Latest</th>
+                                <th>Latency</th>
+                                <th>Last seen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="internet-target-table-body"></tbody>
                     </table>
                 </article>
 
@@ -733,7 +801,6 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     <div class="panel-head">
                         <div>
                             <h2>Path Changes</h2>
-                            <p>Traceroute transitions are summarized separately so routing drift stands out fast.</p>
                         </div>
                     </div>
                     <div class="path-change-list" id="path-change-list"></div>
@@ -766,18 +833,25 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 <section class="detail-section">
                     <div class="panel-head" style="margin-bottom: 12px;">
                         <div>
-                            <h3>Recent incidents</h3>
-                            <p class="muted">Latest non-success events for the selected target.</p>
+                            <h3>Tests</h3>
                         </div>
                     </div>
-                    <ul class="event-list" id="detail-incidents"></ul>
+                    <div class="test-rail" id="detail-test-rail"></div>
+                </section>
+
+                <section class="detail-section">
+                    <div class="panel-head" style="margin-bottom: 12px;">
+                        <div>
+                            <h3>Recent events</h3>
+                        </div>
+                    </div>
+                    <ul class="event-list" id="detail-events"></ul>
                 </section>
 
                 <section class="detail-section">
                     <div class="panel-head" style="margin-bottom: 12px;">
                         <div>
                             <h3>Path history</h3>
-                            <p class="muted">Most recent unique traceroute fingerprints for this target.</p>
                         </div>
                     </div>
                     <ul class="timeline-list" id="detail-paths"></ul>
@@ -791,6 +865,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
         const dashboardState = {
             snapshot: __INITIAL_DATA__,
             selectedTargetId: null,
+            selectedTestType: "all",
             targetDetail: null,
             filters: {
                 search: "",
@@ -893,10 +968,14 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             `;
         }
 
-        function getFilteredTargets() {
+        function getFilteredTargets(kind = "all") {
             const searchTerm = dashboardState.filters.search.trim().toLowerCase();
 
             return dashboardState.snapshot.targets.filter((target) => {
+                if (kind !== "all" && target.target_kind !== kind) {
+                    return false;
+                }
+
                 if (dashboardState.filters.agent !== "all" && target.agent_id !== dashboardState.filters.agent) {
                     return false;
                 }
@@ -945,6 +1024,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             }
 
             dashboardState.selectedTargetId = pickDefaultTarget(filteredTargets);
+            dashboardState.selectedTestType = "all";
         }
 
         async function fetchJson(url, options = undefined) {
@@ -1004,6 +1084,8 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             const summary = dashboardState.snapshot.summary;
             const metricGrid = document.getElementById("metric-grid");
             const freshness = formatAgo(summary.latest_timestamp_utc);
+            const internalCount = dashboardState.snapshot.targets.filter((target) => target.target_kind === "internal").length;
+            const externalCount = dashboardState.snapshot.targets.filter((target) => target.target_kind === "external").length;
 
             metricGrid.innerHTML = [
                 {
@@ -1014,7 +1096,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 {
                     label: "Targets",
                     value: summary.total_targets,
-                    meta: `${summary.total_events} events stored`,
+                    meta: `${internalCount} internal · ${externalCount} internet`,
                 },
                 {
                     label: "Failures",
@@ -1175,15 +1257,14 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             }).join("");
         }
 
-        function renderTargets() {
-            const tableBody = document.getElementById("target-table-body");
-            const filteredTargets = getFilteredTargets();
-            document.getElementById("visible-target-count").textContent = String(filteredTargets.length);
+        function renderTargetRows(tableBodyId, kind, emptyLabel) {
+            const tableBody = document.getElementById(tableBodyId);
+            const filteredTargets = getFilteredTargets(kind);
 
             if (!filteredTargets.length) {
                 tableBody.innerHTML =
-                    '<tr><td colspan="5"><div class="empty-state">No targets match the current filters.</div></td></tr>';
-                return;
+                    `<tr><td colspan="5"><div class="empty-state">${escapeHtml(emptyLabel)}</div></td></tr>`;
+                return 0;
             }
 
             tableBody.innerHTML = filteredTargets
@@ -1193,16 +1274,16 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                             target.target_id
                         )}">
                             <td>
-                                <strong>${escapeHtml(target.fqdn)}</strong>
-                                <div class="target-meta mono">${escapeHtml(target.target_address)}</div>
+                                <strong class="wrap-anywhere">${escapeHtml(target.fqdn)}</strong>
+                                <div class="target-meta mono wrap-anywhere">${escapeHtml(target.target_address)}</div>
                             </td>
                             <td>
-                                <strong>${escapeHtml(target.agent_id)}</strong>
-                                <div class="target-meta">${escapeHtml(target.site_id)}</div>
+                                <strong class="wrap-anywhere">${escapeHtml(target.agent_id)}</strong>
+                                <div class="target-meta wrap-anywhere">${escapeHtml(target.site_id)}</div>
                             </td>
                             <td>
                                 ${buildStatusBadge(target.latest_result)}
-                                <div class="target-meta">${escapeHtml(target.last_test_type)}</div>
+                                <div class="target-meta wrap-anywhere">${escapeHtml(target.last_test_type)}</div>
                             </td>
                             <td class="mono">${escapeHtml(formatNumber(target.last_latency_ms))} ms</td>
                             <td>${escapeHtml(formatAgo(target.last_timestamp_utc))}</td>
@@ -1210,6 +1291,24 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     `
                 )
                 .join("");
+
+            return filteredTargets.length;
+        }
+
+        function renderTargets() {
+            const internalCount = renderTargetRows(
+                "internal-target-table-body",
+                "internal",
+                "No internal targets match the current filters."
+            );
+            const internetCount = renderTargetRows(
+                "internet-target-table-body",
+                "external",
+                "No internet targets match the current filters."
+            );
+
+            document.getElementById("internal-target-count").textContent = String(internalCount);
+            document.getElementById("internet-target-count").textContent = String(internetCount);
         }
 
         function renderImportHealth() {
@@ -1271,10 +1370,10 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                                 )}</span>
                             </div>
                             <dl>
-                                <div><dt>Previous</dt><dd>${escapeHtml(change.previous_path_hash)}</dd></div>
-                                <div><dt>Current</dt><dd>${escapeHtml(change.path_hash)}</dd></div>
+                                <div><dt>Previous path</dt><dd>${escapeHtml(change.previous_path_preview || change.previous_path_hash)}</dd></div>
+                                <div><dt>Current path</dt><dd>${escapeHtml(change.path_preview || change.path_hash)}</dd></div>
                                 <div><dt>Hops</dt><dd>${escapeHtml(String(change.hop_count))}</dd></div>
-                                <div><dt>Site</dt><dd>${escapeHtml(change.site_id)}</dd></div>
+                                <div><dt>Hashes</dt><dd>${escapeHtml(`${change.previous_path_hash} → ${change.path_hash}`)}</dd></div>
                             </dl>
                         </article>
                     `
@@ -1287,17 +1386,27 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             const title = document.getElementById("detail-title");
             const statusShell = document.getElementById("detail-status-shell");
             const metrics = document.getElementById("detail-metrics");
-            const incidentList = document.getElementById("detail-incidents");
+            const testRail = document.getElementById("detail-test-rail");
+            const eventList = document.getElementById("detail-events");
             const pathList = document.getElementById("detail-paths");
 
             if (!detail) {
                 title.textContent = "Waiting for data";
                 statusShell.innerHTML = '<div class="badge"><span id="detail-status-label">No target selected</span></div>';
                 metrics.innerHTML = '<article><span>Selection</span><strong>None</strong></article>';
-                incidentList.innerHTML = '<li>No incidents available.</li>';
+                testRail.innerHTML = '<div class="empty-state">No tests available.</div>';
+                eventList.innerHTML = '<li>No recent events available.</li>';
                 pathList.innerHTML = '<li>No path history available.</li>';
                 drawLatencyChart([]);
                 return;
+            }
+
+            const availableTests = detail.tests || [];
+            if (
+                dashboardState.selectedTestType !== "all" &&
+                !availableTests.some((test) => test.test_type === dashboardState.selectedTestType)
+            ) {
+                dashboardState.selectedTestType = "all";
             }
 
             title.textContent = detail.target.fqdn;
@@ -1320,6 +1429,10 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     value: formatAgo(detail.target.last_timestamp_utc),
                 },
                 {
+                    label: "Category",
+                    value: detail.target.target_kind,
+                },
+                {
                     label: "Last test",
                     value: detail.target.last_test_type,
                 },
@@ -1338,30 +1451,61 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 )
                 .join("");
 
-            incidentList.innerHTML = detail.incidents.length
-                ? detail.incidents
-                      .slice(0, 8)
+            testRail.innerHTML = [
+                `
+                    <button class="test-chip ${dashboardState.selectedTestType === "all" ? "is-active" : ""}" type="button" data-test-type="all">
+                        <strong>All tests</strong>
+                        <span>${escapeHtml(String(detail.recentEvents.length || 0))} recent events</span>
+                    </button>
+                `,
+                ...availableTests.map(
+                    (test) => `
+                        <button class="test-chip ${dashboardState.selectedTestType === test.test_type ? "is-active" : ""}" type="button" data-test-type="${escapeHtml(
+                            test.test_type
+                        )}">
+                            <strong>${escapeHtml(test.test_type)}</strong>
+                            <span>${escapeHtml(test.latest_result)} · ${escapeHtml(
+                                formatAgo(test.last_timestamp_utc)
+                            )}</span>
+                        </button>
+                    `
+                ),
+            ].join("");
+
+            const visibleEvents = (detail.recentEvents || []).filter(
+                (event) =>
+                    dashboardState.selectedTestType === "all" ||
+                    event.test_type === dashboardState.selectedTestType
+            );
+
+            eventList.innerHTML = visibleEvents.length
+                ? visibleEvents
+                      .slice(0, 12)
                       .map(
-                          (incident) => `
+                          (event) => `
                             <li>
-                                <strong>${escapeHtml(incident.test_type)} · ${escapeHtml(incident.result)}</strong>
-                                <span>${escapeHtml(incident.details || incident.error_code || "No details")}</span>
-                                <div class="target-meta">${escapeHtml(formatTimestamp(incident.timestamp_utc))}</div>
+                                <strong>${escapeHtml(event.test_type)} · ${escapeHtml(event.probe_name)} · ${escapeHtml(
+                                    event.result
+                                )}</strong>
+                                <span>${escapeHtml(event.details || event.error_code || "No details")}</span>
+                                <div class="target-meta wrap-anywhere">${escapeHtml(
+                                    `${event.target_address} · ${formatTimestamp(event.timestamp_utc)}`
+                                )}</div>
                             </li>
                         `
                       )
                       .join("")
-                : "<li>No incidents recorded for this target.</li>";
+                : "<li>No events recorded for the selected test.</li>";
 
             pathList.innerHTML = detail.paths.length
                 ? detail.paths
                       .map(
                           (path) => `
                             <li>
-                                <strong>${escapeHtml(path.path_hash)}</strong>
+                                <strong class="wrap-anywhere">${escapeHtml(path.path_preview || path.path_hash)}</strong>
                                 <span>${escapeHtml(String(path.hop_count))} hops · ${escapeHtml(
                                     formatNumber(path.average_hop_latency_ms)
-                                )} ms avg</span>
+                                )} ms avg · ${escapeHtml(path.path_hash)}</span>
                                 <div class="target-meta">${escapeHtml(formatTimestamp(path.last_seen_utc))}</div>
                             </li>
                         `
@@ -1369,7 +1513,12 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                       .join("")
                 : "<li>No traceroute history recorded for this target.</li>";
 
-            drawLatencyChart(detail.latency_series || []);
+            const filteredSeries = (detail.latency_series || []).filter(
+                (point) =>
+                    dashboardState.selectedTestType === "all" ||
+                    point.test_type === dashboardState.selectedTestType
+            );
+            drawLatencyChart(filteredSeries);
         }
 
         function drawLatencyChart(series) {
@@ -1547,16 +1696,20 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 await refreshTargetDetail(dashboardState.selectedTargetId);
             });
 
-            document.getElementById("target-table-body").addEventListener("click", async (event) => {
+            const onTargetTableClick = async (event) => {
                 const row = event.target.closest("[data-target-id]");
                 if (!row) {
                     return;
                 }
 
                 dashboardState.selectedTargetId = row.dataset.targetId;
+                dashboardState.selectedTestType = "all";
                 renderTargets();
                 await refreshTargetDetail(dashboardState.selectedTargetId);
-            });
+            };
+
+            document.getElementById("internal-target-table-body").addEventListener("click", onTargetTableClick);
+            document.getElementById("internet-target-table-body").addEventListener("click", onTargetTableClick);
 
             document.getElementById("path-change-list").addEventListener("click", async (event) => {
                 const card = event.target.closest("[data-target-id]");
@@ -1565,8 +1718,19 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 }
 
                 dashboardState.selectedTargetId = card.dataset.targetId;
+                dashboardState.selectedTestType = "traceroute";
                 renderTargets();
                 await refreshTargetDetail(dashboardState.selectedTargetId);
+            });
+
+            document.getElementById("detail-test-rail").addEventListener("click", (event) => {
+                const button = event.target.closest("[data-test-type]");
+                if (!button) {
+                    return;
+                }
+
+                dashboardState.selectedTestType = button.dataset.testType || "all";
+                renderDetail();
             });
         }
 

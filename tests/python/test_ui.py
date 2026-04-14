@@ -55,6 +55,7 @@ def test_dashboard_renders_live_board_shell() -> None:
             targets=[
                 TargetSummary(
                     target_id="target-01",
+                    target_kind="internal",
                     agent_id="agent-01",
                     fqdn="target.local",
                     site_id="site-a",
@@ -68,8 +69,10 @@ def test_dashboard_renders_live_board_shell() -> None:
             paths=[
                 PathSummary(
                     target_id="target-01",
+                    target_kind="internal",
                     fqdn="target.local",
                     path_hash="abcd1234",
+                    path_preview="edge-gateway -> target.local",
                     last_seen_utc=datetime.now(timezone.utc),
                     hop_count=3,
                     average_hop_latency_ms=8.1,
@@ -93,6 +96,8 @@ def test_dashboard_renders_live_board_shell() -> None:
     )
 
     assert "Agent Fleet" in html
-    assert "Target Explorer" in html
+    assert "PSConnMon Fleet Board" in html
+    assert "Internal Targets" in html
+    assert "Internet Targets" in html
     assert "target.local" in html
     assert '"target_id": "target-01"' in html

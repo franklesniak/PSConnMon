@@ -2,7 +2,7 @@
 
 - **Status:** Active
 - **Owner:** Repository Maintainers
-- **Last Updated:** 2026-04-09
+- **Last Updated:** 2026-04-13
 - **Scope:** Defines the target architecture for the monitoring service,
   reporting service, event flow, and Azure integration. Does not define release
   process policy.
@@ -16,12 +16,16 @@ script provided useful probes but not a durable product boundary.
 
 ## System Overview
 
-- **PowerShell monitor:** Reads YAML or JSON config, runs probe cycles, writes JSONL batch
-  files, optionally mirrors CSV, can resolve trusted local Linux SMB secret
-  files, and can poll Azure Storage for updated config.
+- **PowerShell monitor:** Reads YAML or JSON config, runs probe cycles, writes
+  JSONL batch files, optionally mirrors CSV, can resolve trusted local Linux
+  SMB secret files, and can poll Azure Storage for updated config.
+- **Structured target model:** Separates internal monitored hosts from
+  agent-scoped `internetTargets`, so internet-quality and traceroute telemetry
+  can be queried independently from host reachability.
 - **Python reporting service:** Imports batches from local storage and Azure
   Blob Storage, stores hot data in DuckDB, and renders the built-in dashboard
-  and APIs.
+  and APIs with separate internal/internet target views and per-target
+  drilldowns.
 - **Azure Storage:** Hosts versioned config blobs and raw telemetry uploads for
   centralized aggregation.
 
@@ -40,7 +44,8 @@ flowchart LR
 
 ## Data Flow
 
-1. The operator defines config in the canonical YAML or JSON schema.
+1. The operator defines config in the canonical YAML or JSON schema, including
+   internal `targets` and optional `internetTargets`.
 2. The PowerShell monitor validates the config and executes a monitoring cycle.
 3. Probes emit canonical events into a pending JSONL batch.
 4. The reporting service imports `.jsonl` batches from a local directory,
@@ -59,6 +64,7 @@ flowchart LR
 | Structured config schema | `JSON-Based Input`, `Command and Control Model` |
 | JSON event batches | `Logging and Telemetry`, `Visualization & Reporting` |
 | Cross-platform probe adapters | `Multi-Platform Support`, `Authentication Testing`, `Network Quality Features` |
+| Internet target split | `Default Target Behavior`, `Visualization & Reporting` |
 | Built-in dashboard | `Visualization & Reporting` |
 | Azure Storage control plane | `Command and Control Model`, `Open Architecture Questions` |
 

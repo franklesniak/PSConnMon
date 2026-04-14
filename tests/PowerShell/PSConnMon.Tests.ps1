@@ -64,6 +64,7 @@ function script:New-PSConnMonTestConfig {
                 linuxProfileId = ''
             }
         )
+        internetTargets = @()
         extensions = @()
         _runtime = @{
             configDirectory = $TempRoot
@@ -150,12 +151,14 @@ Describe 'Test-PSConnMonConfig' {
                     externalTraceTarget = '127.0.0.1'
                 }
             )
+            internetTargets = @()
             extensions = @()
         }
 
         $normalized = Test-PSConnMonConfig -Config $config -PassThru
         $normalized.agent.agentId | Should -Be 'agent-01'
         $normalized.targets.Count | Should -Be 1
+        $normalized.internetTargets.Count | Should -Be 0
         $normalized.tests.enabled | Should -Contain 'ping'
     }
 
@@ -217,6 +220,7 @@ Describe 'Test-PSConnMonConfig' {
                     externalTraceTarget = '127.0.0.1'
                 }
             )
+            internetTargets = @()
             extensions = @()
         }
 
@@ -268,6 +272,7 @@ targets:
     tests:
       - ping
     externalTraceTarget: 127.0.0.1
+internetTargets: []
 extensions: []
 '@ | Set-Content -Path $configPath -Encoding UTF8
 
@@ -323,6 +328,7 @@ extensions: []
                     externalTraceTarget = '127.0.0.1'
                 }
             )
+            internetTargets = @()
             extensions = @(
                 @{
                     id = 'custom'
@@ -359,8 +365,58 @@ Describe 'ConvertTo-PSConnMonConfig' {
 
         $config.agent.agentId | Should -Be 'object-agent'
         $config.targets.Count | Should -Be 1
+        $config.internetTargets.Count | Should -Be 0
         $config.targets[0].id | Should -Be 'loopback'
         $config.targets[0].tests | Should -Contain 'ping'
+    }
+
+    It 'Accepts dedicated internet targets in object input mode' {
+        $config = ConvertTo-PSConnMonConfig -Targets @(
+            [pscustomobject]@{
+                id = 'loopback'
+                fqdn = 'localhost'
+                address = '127.0.0.1'
+                tests = @('ping')
+                tags = @('local')
+            }
+        ) -InternetTargets @(
+            [pscustomobject]@{
+                id = 'internet-cloudflare'
+                name = 'Cloudflare DNS'
+                address = '1.1.1.1'
+                tests = @('internetQuality', 'traceroute')
+            }
+        ) -Agent @{
+            agentId = 'object-agent'
+            siteId = 'object-site'
+            spoolDirectory = 'data/object-spool'
+        } -Tests @{
+            enabled = @('ping', 'internetQuality', 'traceroute')
+        }
+
+        $config.internetTargets.Count | Should -Be 1
+        $config.internetTargets[0].id | Should -Be 'internet-cloudflare'
+        $config.internetTargets[0].address | Should -Be '1.1.1.1'
+    }
+}
+
+Describe 'Legacy internet target migration' {
+    It 'Promotes legacy external trace settings into internetTargets' {
+        $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
+        [void](New-Item -Path $tempRoot -ItemType Directory -Force)
+        $config = New-PSConnMonTestConfig -TempRoot $tempRoot -EnabledTests @('ping', 'internetQuality', 'traceroute')
+        $config.targets[0].externalTraceTarget = '8.8.8.8'
+
+        $normalized = Test-PSConnMonConfig -Config $config -PassThru
+
+        $normalized.targets[0].tests | Should -Be @('ping')
+        $normalized.targets[0].targetKind | Should -Be 'internal'
+        $normalized.internetTargets.Count | Should -Be 1
+        $normalized.internetTargets[0].id | Should -Be 'loopback-internet'
+        $normalized.internetTargets[0].address | Should -Be '8.8.8.8'
+        $normalized.internetTargets[0].tests | Should -Contain 'internetQuality'
+        $normalized.internetTargets[0].tests | Should -Contain 'traceroute'
+        $normalized.internetTargets[0].targetKind | Should -Be 'external'
     }
 }
 
@@ -553,6 +609,7 @@ Describe 'Start-PSConnMonCycle' {
                     externalTraceTarget = '127.0.0.1'
                 }
             )
+            internetTargets = @()
             extensions = @()
         }
 
@@ -640,6 +697,7 @@ function Invoke-CustomProbe {
                     externalTraceTarget = '127.0.0.1'
                 }
             )
+            internetTargets = @()
             extensions = @(
                 @{
                     id = 'customProbe'
@@ -1037,6 +1095,47 @@ Describe 'Linux share and domain auth probes' {
             ($events | Where-Object { $_.testType -eq 'ping' }).result | Should -Be 'SUCCESS'
         }
     }
+
+    It 'Tags internal and internet target events separately in cycle metadata' {
+        $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
+        [void](New-Item -Path $tempRoot -ItemType Directory -Force)
+        $config = New-PSConnMonTestConfig -TempRoot $tempRoot -EnabledTests @('ping')
+        $config.internetTargets = @(
+            @{
+                id = 'internet-cloudflare'
+                name = 'Cloudflare DNS'
+                address = '1.1.1.1'
+                tests = @('internetQuality')
+            }
+        )
+        $config = Test-PSConnMonConfig -Config $config -PassThru
+
+        InModuleScope PSConnMon -Parameters @{ ConfigValue = $config; TempRootValue = $tempRoot } {
+            param($ConfigValue, $TempRootValue)
+            Mock -ModuleName PSConnMon Test-PSConnMonPing {
+                @(
+                    Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
+                        -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'ping' -ProbeName 'Ping.Primary' `
+                        -Result 'SUCCESS' -Details 'ping ok'
+                )
+            }
+            Mock -ModuleName PSConnMon Test-PSConnMonInternetQuality {
+                @(
+                    Get-PSConnMonEventRecord -AgentId $Config.agent.agentId -SiteId $Config.agent.siteId -TargetId $Target.id `
+                        -Fqdn $Target.fqdn -TargetAddress $Target.address -TestType 'internetQuality' `
+                        -ProbeName 'InternetQuality.SampleSet' -Result 'SUCCESS' -Details 'internet ok'
+                )
+            }
+
+            $batchPath = Join-Path -Path $TempRootValue -ChildPath 'pending/cycle.jsonl'
+            $events = @(Start-PSConnMonCycle -Config $ConfigValue -BatchPath $batchPath)
+
+            $events.Count | Should -Be 2
+            ($events | Where-Object { $_.targetId -eq 'loopback' }).metadata.targetKind | Should -Be 'internal'
+            ($events | Where-Object { $_.targetId -eq 'internet-cloudflare' }).metadata.targetKind | Should -Be 'external'
+            ($events | Where-Object { $_.targetId -eq 'internet-cloudflare' }).metadata.targetClass | Should -Be 'internet'
+        }
+    }
 }
 
 Describe 'Traceroute probe handling' {
@@ -1136,16 +1235,24 @@ $targets = @(
         tags = @('local')
     }
 )
+$internetTargets = @(
+    [pscustomobject]@{
+        id = 'internet-cloudflare'
+        name = 'Cloudflare DNS'
+        address = '1.1.1.1'
+        tests = @('internetQuality')
+    }
+)
 $agent = @{
     agentId = 'object-agent'
     siteId = 'object-site'
     spoolDirectory = '__SPOOL__'
 }
 $tests = @{
-    enabled = @('ping')
+    enabled = @('ping', 'internetQuality')
 }
 
-& '__SCRIPT__' -Targets $targets -Agent $agent -Tests $tests -RunOnce
+& '__SCRIPT__' -Targets $targets -InternetTargets $internetTargets -Agent $agent -Tests $tests -RunOnce
 '@
         $helperScript = $helperScript.Replace('__SPOOL__', (($tempRoot.Replace('\', '/')) + '/spool'))
         $helperScript = $helperScript.Replace('__SCRIPT__', $scriptPath.Replace('\', '/'))

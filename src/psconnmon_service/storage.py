@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -19,7 +20,9 @@ from .models import (
     PathChangeSummary,
     SiteSummary,
     TargetDetail,
+    TargetEventSummary,
     TargetSummary,
+    TestSummary,
 )
 
 
@@ -355,6 +358,7 @@ class StorageRepository:
             WITH ranked AS (
                 SELECT
                     target_id,
+                    COALESCE(json_extract_string(metadata, '$.targetKind'), 'internal') AS target_kind,
                     agent_id,
                     fqdn,
                     site_id,
@@ -367,10 +371,10 @@ class StorageRepository:
                 FROM events
                 WHERE result <> 'INFO'
             )
-            SELECT target_id, agent_id, fqdn, site_id, target_address, test_type, result, latency_ms, timestamp_utc
+            SELECT target_id, target_kind, agent_id, fqdn, site_id, target_address, test_type, result, latency_ms, timestamp_utc
             FROM ranked
             WHERE row_number = 1
-            ORDER BY fqdn
+            ORDER BY target_kind, fqdn
         """
 
         with self._connect() as connection:
@@ -379,14 +383,15 @@ class StorageRepository:
         return [
             TargetSummary(
                 target_id=row[0],
-                agent_id=row[1],
-                fqdn=row[2],
-                site_id=row[3],
-                target_address=row[4],
-                last_test_type=row[5],
-                latest_result=row[6],
-                last_latency_ms=row[7],
-                last_timestamp_utc=row[8],
+                target_kind=row[1],
+                agent_id=row[2],
+                fqdn=row[3],
+                site_id=row[4],
+                target_address=row[5],
+                last_test_type=row[6],
+                latest_result=row[7],
+                last_latency_ms=row[8],
+                last_timestamp_utc=row[9],
             )
             for row in rows
         ]
@@ -493,17 +498,36 @@ class StorageRepository:
         """Return traceroute/path summaries."""
 
         query = """
+            WITH latest_hops AS (
+                SELECT
+                    target_id,
+                    COALESCE(json_extract_string(metadata, '$.targetKind'), 'internal') AS target_kind,
+                    fqdn,
+                    COALESCE(path_hash, 'unknown') AS path_hash,
+                    hop_index,
+                    COALESCE(hop_name, hop_address, '*') AS hop_label,
+                    hop_latency_ms,
+                    timestamp_utc,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY target_id, COALESCE(path_hash, 'unknown'), hop_index
+                        ORDER BY timestamp_utc DESC
+                    ) AS row_number
+                FROM events
+                WHERE test_type = 'traceroute' AND hop_index IS NOT NULL
+            )
             SELECT
                 target_id,
+                target_kind,
                 fqdn,
-                COALESCE(path_hash, 'unknown') AS path_hash,
+                path_hash,
+                string_agg(hop_label, ' -> ' ORDER BY hop_index) AS path_preview,
                 MAX(timestamp_utc) AS last_seen_utc,
-                COUNT(DISTINCT hop_index) AS hop_count,
+                COUNT(*) AS hop_count,
                 AVG(hop_latency_ms) AS average_hop_latency_ms
-            FROM events
-            WHERE test_type = 'traceroute'
-            GROUP BY target_id, fqdn, COALESCE(path_hash, 'unknown')
-            ORDER BY fqdn, last_seen_utc DESC
+            FROM latest_hops
+            WHERE row_number = 1
+            GROUP BY target_id, target_kind, fqdn, path_hash
+            ORDER BY target_kind, fqdn, last_seen_utc DESC
         """
 
         with self._connect() as connection:
@@ -512,11 +536,13 @@ class StorageRepository:
         return [
             PathSummary(
                 target_id=row[0],
-                fqdn=row[1],
-                path_hash=row[2],
-                last_seen_utc=row[3],
-                hop_count=int(row[4] or 0),
-                average_hop_latency_ms=row[5],
+                target_kind=row[1],
+                fqdn=row[2],
+                path_hash=row[3],
+                path_preview=row[4] or "",
+                last_seen_utc=row[5],
+                hop_count=int(row[6] or 0),
+                average_hop_latency_ms=row[7],
             )
             for row in rows
         ]
@@ -559,41 +585,71 @@ class StorageRepository:
         """Return recent traceroute path transitions."""
 
         query = """
-            WITH per_path AS (
+            WITH latest_hops AS (
                 SELECT
                     target_id,
+                    COALESCE(json_extract_string(metadata, '$.targetKind'), 'internal') AS target_kind,
+                    fqdn,
+                    site_id,
+                    agent_id,
+                    COALESCE(path_hash, 'unknown') AS path_hash,
+                    hop_index,
+                    COALESCE(hop_name, hop_address, '*') AS hop_label,
+                    timestamp_utc,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY target_id, COALESCE(path_hash, 'unknown'), hop_index
+                        ORDER BY timestamp_utc DESC
+                    ) AS row_number
+                FROM events
+                WHERE test_type = 'traceroute' AND path_hash IS NOT NULL AND hop_index IS NOT NULL
+            ),
+            per_path AS (
+                SELECT
+                    target_id,
+                    target_kind,
                     fqdn,
                     site_id,
                     agent_id,
                     path_hash,
+                    string_agg(hop_label, ' -> ' ORDER BY hop_index) AS path_preview,
                     MAX(timestamp_utc) AS timestamp_utc,
-                    COUNT(DISTINCT hop_index) AS hop_count
-                FROM events
-                WHERE test_type = 'traceroute' AND path_hash IS NOT NULL
-                GROUP BY target_id, fqdn, site_id, agent_id, path_hash
+                    COUNT(*) AS hop_count
+                FROM latest_hops
+                WHERE row_number = 1
+                GROUP BY target_id, target_kind, fqdn, site_id, agent_id, path_hash
             ),
             ordered AS (
                 SELECT
                     target_id,
+                    target_kind,
                     fqdn,
                     site_id,
                     agent_id,
                     path_hash,
+                    path_preview,
                     hop_count,
                     timestamp_utc,
                     LAG(path_hash) OVER (
                         PARTITION BY target_id
                         ORDER BY timestamp_utc
                     ) AS previous_path_hash
+                    ,
+                    LAG(path_preview) OVER (
+                        PARTITION BY target_id
+                        ORDER BY timestamp_utc
+                    ) AS previous_path_preview
                 FROM per_path
             )
             SELECT
                 target_id,
+                target_kind,
                 fqdn,
                 site_id,
                 agent_id,
                 previous_path_hash,
+                previous_path_preview,
                 path_hash,
+                path_preview,
                 hop_count,
                 timestamp_utc
             FROM ordered
@@ -608,13 +664,16 @@ class StorageRepository:
         return [
             PathChangeSummary(
                 target_id=row[0],
-                fqdn=row[1],
-                site_id=row[2],
-                agent_id=row[3],
-                previous_path_hash=row[4],
-                path_hash=row[5],
-                hop_count=int(row[6] or 0),
-                timestamp_utc=self._normalize_timestamp(row[7]),
+                target_kind=row[1],
+                fqdn=row[2],
+                site_id=row[3],
+                agent_id=row[4],
+                previous_path_hash=row[5],
+                previous_path_preview=row[6] or "",
+                path_hash=row[7],
+                path_preview=row[8] or "",
+                hop_count=int(row[9] or 0),
+                timestamp_utc=self._normalize_timestamp(row[10]),
             )
             for row in rows
         ]
@@ -633,17 +692,85 @@ class StorageRepository:
             ORDER BY timestamp_utc DESC
             LIMIT ?
         """
+        test_query = """
+            WITH ranked AS (
+                SELECT
+                    test_type,
+                    probe_name,
+                    result,
+                    target_address,
+                    latency_ms,
+                    timestamp_utc,
+                    COUNT(*) OVER (PARTITION BY test_type) AS event_count,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY test_type
+                        ORDER BY timestamp_utc DESC
+                    ) AS row_number
+                FROM events
+                WHERE target_id = ? AND result <> 'INFO'
+            )
+            SELECT
+                test_type,
+                result,
+                probe_name,
+                target_address,
+                latency_ms,
+                timestamp_utc,
+                event_count
+            FROM ranked
+            WHERE row_number = 1
+            ORDER BY test_type
+        """
+        recent_event_query = """
+            SELECT
+                timestamp_utc,
+                test_type,
+                probe_name,
+                result,
+                target_address,
+                latency_ms,
+                error_code,
+                details,
+                dns_server,
+                path_hash,
+                hop_index,
+                hop_address,
+                metadata
+            FROM events
+            WHERE target_id = ?
+            ORDER BY timestamp_utc DESC
+            LIMIT 80
+        """
         path_query = """
+            WITH latest_hops AS (
+                SELECT
+                    target_id,
+                    COALESCE(json_extract_string(metadata, '$.targetKind'), 'internal') AS target_kind,
+                    fqdn,
+                    COALESCE(path_hash, 'unknown') AS path_hash,
+                    hop_index,
+                    COALESCE(hop_name, hop_address, '*') AS hop_label,
+                    hop_latency_ms,
+                    timestamp_utc,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY target_id, COALESCE(path_hash, 'unknown'), hop_index
+                        ORDER BY timestamp_utc DESC
+                    ) AS row_number
+                FROM events
+                WHERE target_id = ? AND test_type = 'traceroute' AND hop_index IS NOT NULL
+            )
             SELECT
                 target_id,
+                target_kind,
                 fqdn,
-                COALESCE(path_hash, 'unknown') AS path_hash,
+                path_hash,
+                string_agg(hop_label, ' -> ' ORDER BY hop_index) AS path_preview,
                 MAX(timestamp_utc) AS last_seen_utc,
-                COUNT(DISTINCT hop_index) AS hop_count,
+                COUNT(*) AS hop_count,
                 AVG(hop_latency_ms) AS average_hop_latency_ms
-            FROM events
-            WHERE target_id = ? AND test_type = 'traceroute'
-            GROUP BY target_id, fqdn, COALESCE(path_hash, 'unknown')
+            FROM latest_hops
+            WHERE row_number = 1
+            GROUP BY target_id, target_kind, fqdn, path_hash
             ORDER BY last_seen_utc DESC
             LIMIT 8
         """
@@ -666,11 +793,43 @@ class StorageRepository:
             timeline_rows = connection.execute(
                 timeline_query, [target_id, timeline_limit]
             ).fetchall()
+            test_rows = connection.execute(test_query, [target_id]).fetchall()
+            recent_event_rows = connection.execute(recent_event_query, [target_id]).fetchall()
             path_rows = connection.execute(path_query, [target_id]).fetchall()
             incident_rows = connection.execute(incident_query, [target_id]).fetchall()
 
         return TargetDetail(
             target=targets[0],
+            tests=[
+                TestSummary(
+                    test_type=row[0],
+                    latest_result=row[1],
+                    latest_probe_name=row[2],
+                    latest_target_address=row[3],
+                    last_latency_ms=row[4],
+                    last_timestamp_utc=self._normalize_optional_timestamp(row[5]),
+                    event_count=int(row[6] or 0),
+                )
+                for row in test_rows
+            ],
+            recent_events=[
+                TargetEventSummary(
+                    timestamp_utc=self._normalize_timestamp(row[0]),
+                    test_type=row[1],
+                    probe_name=row[2],
+                    result=row[3],
+                    target_address=row[4],
+                    latency_ms=row[5],
+                    error_code=row[6],
+                    details=row[7],
+                    dns_server=row[8],
+                    path_hash=row[9],
+                    hop_index=row[10],
+                    hop_address=row[11],
+                    metadata=self._normalize_metadata(row[12]),
+                )
+                for row in recent_event_rows
+            ],
             latency_series=[
                 LatencyPoint(
                     timestamp_utc=self._normalize_timestamp(row[0]),
@@ -695,11 +854,13 @@ class StorageRepository:
             paths=[
                 PathSummary(
                     target_id=row[0],
-                    fqdn=row[1],
-                    path_hash=row[2],
-                    last_seen_utc=row[3],
-                    hop_count=int(row[4] or 0),
-                    average_hop_latency_ms=row[5],
+                    target_kind=row[1],
+                    fqdn=row[2],
+                    path_hash=row[3],
+                    path_preview=row[4] or "",
+                    last_seen_utc=row[5],
+                    hop_count=int(row[6] or 0),
+                    average_hop_latency_ms=row[7],
                 )
                 for row in path_rows
             ],
@@ -773,3 +934,19 @@ class StorageRepository:
         if value is None:
             return None
         return value  # type: ignore[return-value]
+
+    @staticmethod
+    def _normalize_metadata(value: object) -> dict[str, object]:
+        """Normalize JSON metadata returned by DuckDB."""
+
+        if value is None:
+            return {}
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return {}

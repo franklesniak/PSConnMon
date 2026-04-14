@@ -56,9 +56,6 @@ targets:
       - ping
       - dns
       - share
-      - internetQuality
-      - traceroute
-    externalTraceTarget: 8.8.8.8
   - id: dc01
     fqdn: dc01.corp.local
     address: 10.10.0.10
@@ -72,7 +69,17 @@ targets:
     tests:
       - ping
       - dns
+internetTargets:
+  - id: internet-google
+    name: Google DNS
+    address: 8.8.8.8
+    tests:
       - internetQuality
       - traceroute
-    externalTraceTarget: 1.1.1.1
+  - id: internet-cloudflare
+    name: Cloudflare DNS
+    address: 1.1.1.1
+    tests:
+      - internetQuality
+      - traceroute
 extensions: []

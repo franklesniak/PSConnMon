@@ -142,3 +142,100 @@ def test_storage_ignores_info_events_for_latest_health_state(tmp_path: Path) -> 
     assert agents[0].failing_targets == 0
     assert agents[0].timeout_targets == 0
     assert sites[0].failing_targets == 0
+
+
+def test_storage_separates_internet_targets_and_exposes_drilldown_data(tmp_path: Path) -> None:
+    """Internet targets should retain their category and drilldown summaries."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    events = [
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:00:00Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "internet-cloudflare",
+                "fqdn": "Cloudflare DNS",
+                "targetAddress": "1.1.1.1",
+                "testType": "internetQuality",
+                "probeName": "InternetQuality.SampleSet",
+                "result": "SUCCESS",
+                "latencyMs": 19.5,
+                "loss": 0.0,
+                "errorCode": None,
+                "details": "Average latency 19.50 ms across 5/5 successful samples.",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {"targetKind": "external", "targetClass": "internet"},
+            }
+        ),
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:01:00Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "internet-cloudflare",
+                "fqdn": "Cloudflare DNS",
+                "targetAddress": "1.1.1.1",
+                "testType": "traceroute",
+                "probeName": "Traceroute.Path",
+                "result": "INFO",
+                "latencyMs": None,
+                "loss": None,
+                "errorCode": None,
+                "details": "1  10.0.100.1  1.000 ms  0.900 ms  0.850 ms",
+                "dnsServer": None,
+                "hopIndex": 1,
+                "hopAddress": "10.0.100.1",
+                "hopName": None,
+                "hopLatencyMs": 1.0,
+                "pathHash": "route-a",
+                "metadata": {"targetKind": "external", "targetClass": "internet", "role": "hop"},
+            }
+        ),
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:01:01Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "internet-cloudflare",
+                "fqdn": "Cloudflare DNS",
+                "targetAddress": "1.1.1.1",
+                "testType": "traceroute",
+                "probeName": "Traceroute.Summary",
+                "result": "SUCCESS",
+                "latencyMs": None,
+                "loss": None,
+                "errorCode": None,
+                "details": "Traceroute completed with 1 hops.",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": "route-a",
+                "metadata": {
+                    "targetKind": "external",
+                    "targetClass": "internet",
+                    "role": "summary",
+                    "hopCount": 1,
+                },
+            }
+        ),
+    ]
+
+    repository.ingest_events(events)
+    targets = repository.list_targets()
+    detail = repository.get_target_detail("internet-cloudflare")
+    paths = repository.list_paths()
+
+    assert targets[0].target_kind == "external"
+    assert detail is not None
+    assert detail.target.target_kind == "external"
+    assert {test.test_type for test in detail.tests} == {"internetQuality", "traceroute"}
+    assert detail.recent_events[0].metadata["targetClass"] == "internet"
+    assert paths[0].path_preview == "10.0.100.1"
