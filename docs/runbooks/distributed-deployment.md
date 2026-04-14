@@ -259,6 +259,36 @@ Store `/etc/psconnmon/secrets/svc-psconnmon.keytab` with owner-only
 permissions. Secret JSON files and referenced keytabs **MUST** remain under the
 config directory or `<spoolDirectory>/secrets`.
 
+#### Credential Handling Model
+
+Linux credential handling in PSConnMon is split by probe type:
+
+- `targets[].linuxProfileId` controls `domainAuth` for that target and also acts
+  as the default Linux auth profile for target-scoped SMB checks.
+- `targets[].shares[].linuxProfileId` overrides the target default only for that
+  share probe. It does not affect `domainAuth`.
+- `kerberosKeytab` **SHOULD** be the default for unattended Ubuntu or `systemd`
+  deployments that need `domainAuth` or Kerberos-backed SMB access.
+- `currentContext` **MAY** be used only when the collector host already keeps a
+  valid Kerberos ticket cache in the service account context. It **MUST NOT**
+  define `secretReference`.
+- `usernamePassword` **MUST** be treated as SMB-only. `domainAuth` skips that
+  mode with `DomainAuthUnsupportedProfileMode`.
+
+Credential material **MUST** stay local to the collector:
+
+- `auth.linuxProfiles[].secretReference` **MUST** point to a local JSON file.
+- Secret JSON files **MUST NOT** be embedded inline in YAML or JSON configs and
+  **MUST NOT** be stored in Azure config blobs.
+- Keytabs, password JSON files, and SAS tokens **MUST** stay out of version
+  control.
+- `ccachePath` **SHOULD** point to a path writable by the Linux service account,
+  typically under `<spoolDirectory>/secrets`.
+
+For the summit topology, keep the target-level domain controller profile on
+`dc01` as `kerberosKeytab`, then override only the non-domain share with a
+`usernamePassword` profile.
+
 ```yaml
 schemaVersion: '1.0'
 agent:
@@ -438,17 +468,141 @@ The `powershell-yaml` install is required only when this collector will read a
 module install and point `-ConfigPath` plus `publish.azure.configBlobPath` at
 `.json` files instead.
 
+Select the identities before configuring Kerberos:
+
+- The Linux collector **SHOULD** run as a normal local user that owns the
+  deployed repository path and the secret material it needs. For the summit
+  walkthrough, using an existing local user such as `blake` is valid if that
+  account also needs access to `/opt/PSConnMon`.
+- The AD identity used for keytab-backed `domainAuth` **SHOULD** be a dedicated
+  service account such as `svc-psconnmon@CORP.EXAMPLE.COM`.
+- The local Linux user and the AD Kerberos principal do not need to match.
+- Personal AD identities **SHOULD NOT** be turned into long-lived keytabs unless
+  you explicitly accept the operational and security trade-offs.
+
+Prepare Ubuntu for Kerberos-backed `domainAuth` before the first collector run:
+
+1. Ensure the Linux host can resolve the domain controller and realm records.
+
+   On Ubuntu 20.04, update DNS persistently through netplan rather than editing
+   `/etc/resolv.conf` directly. Example:
+
+   ```yaml
+   network:
+     version: 2
+     ethernets:
+       eth0:
+         dhcp4: true
+         nameservers:
+           addresses:
+             - 10.10.0.10
+           search:
+             - corp.example.com
+   ```
+
+   Apply and verify it:
+
+   ```bash
+   sudo netplan apply
+   resolvectl status
+   ```
+
+   ```bash
+   getent hosts dc01.corp.example.com
+   dig +short _kerberos._tcp.corp.example.com SRV
+   ```
+
+2. Ensure clock sync is healthy. Kerberos is sensitive to clock skew.
+
+   ```bash
+   timedatectl status
+   ```
+
+3. Configure `/etc/krb5.conf` so the collector realm maps to the correct AD
+   domain and KDC. A minimal example is:
+
+   ```ini
+   [libdefaults]
+       default_realm = CORP.EXAMPLE.COM
+       dns_lookup_kdc = true
+       dns_lookup_realm = false
+       rdns = false
+
+   [realms]
+       CORP.EXAMPLE.COM = {
+           kdc = dc01.corp.example.com
+       }
+
+   [domain_realm]
+       .corp.example.com = CORP.EXAMPLE.COM
+       corp.example.com = CORP.EXAMPLE.COM
+   ```
+
+4. Create the AD service account and generate the keytab on a Windows host with
+   AD administration tools. A minimal flow is:
+
+   ```powershell
+   New-ADUser `
+     -Name "svc-psconnmon" `
+     -SamAccountName "svc-psconnmon" `
+     -UserPrincipalName "svc-psconnmon@CORP.EXAMPLE.COM" `
+     -Enabled $true `
+     -AccountPassword (Read-Host "Service account password" -AsSecureString)
+   Set-ADUser svc-psconnmon -Replace @{'msDS-SupportedEncryptionTypes'=24}
+   ```
+
+   ```cmd
+   ktpass /out "%USERPROFILE%\Desktop\svc-psconnmon.keytab" /princ svc-psconnmon@CORP.EXAMPLE.COM /mapuser CORP\svc-psconnmon /crypto AES256-SHA1 /ptype KRB5_NT_PRINCIPAL /pass *
+   ```
+
+   Notes:
+
+   - The `principal` string in the keytab **MUST** exactly match the principal
+     configured in the Linux secret JSON.
+   - If the Linux host uses MIT Kerberos, keep the realm consistently uppercase
+     in the generated keytab, secret JSON, and validation commands.
+   - Regenerating the keytab invalidates older copies for practical purposes.
+
+5. After copying the keytab and secret JSON files into place, ensure the local
+   Linux runtime user can read or write them and can create the Kerberos cache
+   path.
+
+   If you want the collector user to maintain the checked-out repository under
+   `/opt/PSConnMon`, make that user the owner of the repository and service
+   directories. For example, if the runtime account is `blake`:
+
+   ```bash
+   sudo chown -R blake:blake /opt/PSConnMon
+   sudo install -d -o blake -g blake -m 700 /etc/psconnmon/secrets
+   sudo install -d -o blake -g blake -m 700 /var/lib/psconnmon/spool/secrets
+   sudo chown blake:blake /etc/psconnmon/secrets/dc-keytab.json
+   sudo chown blake:blake /etc/psconnmon/secrets/fileshare-creds.json
+   sudo chown blake:blake /etc/psconnmon/secrets/svc-psconnmon.keytab
+   sudo chmod 600 /etc/psconnmon/secrets/dc-keytab.json
+   sudo chmod 600 /etc/psconnmon/secrets/fileshare-creds.json
+   sudo chmod 600 /etc/psconnmon/secrets/svc-psconnmon.keytab
+   ```
+
+6. Decide which Linux auth mode each target needs:
+
+   - Use `kerberosKeytab` for unattended `domainAuth` or Kerberos-backed SMB.
+   - Use `currentContext` only if the collector service user already acquires
+     and renews its own Kerberos tickets outside PSConnMon.
+   - Use `usernamePassword` only for SMB shares that do not participate in the
+     Kerberos realm.
+
 Copy the repository content to the Ubuntu host, for example under
 `/opt/psconnmon`, and place the config file at
 `/etc/psconnmon/ubuntu-branch-01.psconnmon.yaml`. For the summit demo, align
 that deployed file with
 [`samples/config/summit/ubuntu-branch-01.psconnmon.yaml`](../../samples/config/summit/ubuntu-branch-01.psconnmon.yaml).
 
-Run a one-cycle validation first:
+Run a one-cycle validation first in the same Linux user context that will own
+the long-running service:
 
 ```bash
 cd /opt/psconnmon
-pwsh -NoLogo -NoProfile -File ./Watch-Network.ps1 \
+sudo -u blake pwsh -NoLogo -NoProfile -File ./Watch-Network.ps1 \
   -ConfigPath /etc/psconnmon/ubuntu-branch-01.psconnmon.yaml \
   -RunOnce
 ```
@@ -465,10 +619,30 @@ Expected validation results:
 Manual Kerberos checks for the domain share:
 
 ```bash
-kinit -k -t /etc/psconnmon/secrets/svc-psconnmon.keytab svc-psconnmon@CORP.EXAMPLE.COM
-klist
-smbclient //dc01.corp.example.com/SYSVOL -k -c 'ls'
+sudo -u blake klist -kte /etc/psconnmon/secrets/svc-psconnmon.keytab
+sudo -u blake env KRB5CCNAME=/var/lib/psconnmon/spool/secrets/krb5cc-dc-keytab \
+  kinit -V -k -t /etc/psconnmon/secrets/svc-psconnmon.keytab \
+  svc-psconnmon@CORP.EXAMPLE.COM
+sudo -u blake env KRB5CCNAME=/var/lib/psconnmon/spool/secrets/krb5cc-dc-keytab klist
+sudo -u blake env KRB5CCNAME=/var/lib/psconnmon/spool/secrets/krb5cc-dc-keytab \
+  smbclient //dc01.corp.example.com/SYSVOL --use-kerberos=required -c 'ls'
 ```
+
+Adjust the Linux username, cache path, share path, and realm for your
+environment. The important rule is that all of those commands **MUST** succeed as
+the same local user that will run the collector service.
+
+If those commands fail, do not start debugging inside PSConnMon yet. Correct the
+host Kerberos state first. Typical root causes are:
+
+- `/etc/krb5.conf` does not map the domain to the intended realm or KDC.
+- DNS from the Ubuntu host does not resolve the domain controller correctly.
+- The Linux clock is out of sync with the domain.
+- The keytab principal or encryption types do not match the account in AD.
+- The keytab was generated with a realm or principal spelling that does not
+  exactly match the Linux `kinit` command and secret JSON.
+- The `ccachePath` parent directory is not writable by the collector service
+  account.
 
 Manual explicit-credential check for the non-domain share:
 
@@ -492,7 +666,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=psconnmon
+User=blake
 WorkingDirectory=/opt/psconnmon
 ExecStart=/usr/bin/pwsh -NoLogo -NoProfile -File /opt/psconnmon/Watch-Network.ps1 -ConfigPath /etc/psconnmon/ubuntu-branch-01.psconnmon.yaml
 Restart=always
@@ -504,6 +678,11 @@ WantedBy=multi-user.target
 
 Update `ExecStart` to point at the exact deployed config path. For the summit
 sample layout, that path is `/etc/psconnmon/ubuntu-branch-01.psconnmon.yaml`.
+The `User=` value **MUST** be the same Linux identity that owns the secret files
+and writes the Kerberos cache path. If you keep the summit walkthrough aligned
+to local user `blake`, the manual `kinit`, `klist`, `smbclient`, and
+`Watch-Network.ps1 -RunOnce` validation commands **SHOULD** all be executed as
+`blake` before enabling the service.
 
 ## Step 5: Deploy the Windows Collector
 
