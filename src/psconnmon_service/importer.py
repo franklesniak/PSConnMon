@@ -155,9 +155,28 @@ class AzureBlobBatchSource:
 class ImportManager:
     """Coordinate scheduled import runs and persist source status in DuckDB."""
 
-    def __init__(self, repository: StorageRepository, settings: ServiceSettings) -> None:
+    def __init__(
+        self,
+        repository: StorageRepository,
+        settings: ServiceSettings,
+        *,
+        sources: list[BatchSource] | None = None,
+    ) -> None:
+        """Construct an import manager.
+
+        Args:
+            repository: Storage repository to persist imported events into.
+            settings:   Resolved service settings (import mode, paths, etc.).
+            sources:    Optional explicit source list.  When provided, these
+                sources are used instead of the default set derived from
+                ``settings.import_mode``.  Intended as a seam for tests and
+                callers that need to inject custom ``BatchSource`` instances;
+                production code should omit this argument.
+        """
+
         self.repository = repository
         self.settings = settings
+        self._explicit_sources = list(sources) if sources is not None else None
         self._run_lock = threading.Lock()
         self._stop_event = asyncio.Event()
 
@@ -193,6 +212,9 @@ class ImportManager:
 
     def _build_sources(self) -> list[BatchSource]:
         """Resolve the enabled import sources for this service instance."""
+
+        if self._explicit_sources is not None:
+            return list(self._explicit_sources)
 
         if self.settings.import_mode == "disabled":
             return []

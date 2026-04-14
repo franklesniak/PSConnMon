@@ -84,6 +84,22 @@ resource "azurerm_container_app" "psconnmon" {
   revision_mode                = "Single"
   tags                         = var.tags
 
+  lifecycle {
+    # When deploy_storage is false, the reporting app still needs account and
+    # container names injected via the existing_storage_* inputs so it can
+    # pick azure/hybrid import modes at runtime.  Catch that at plan time
+    # instead of deploying a Container App that crashes on startup.
+    precondition {
+      condition = (
+        var.deploy_storage ||
+        var.container_app_import_mode == "disabled" ||
+        var.container_app_import_mode == "local" ||
+        (var.existing_storage_account_name != "" && var.existing_storage_container_name != "")
+      )
+      error_message = "When deploy_storage = false and container_app_import_mode is '', 'azure', or 'hybrid', existing_storage_account_name and existing_storage_container_name must both be set."
+    }
+  }
+
   identity {
     type         = "UserAssigned"
     identity_ids = [azurerm_user_assigned_identity.psconnmon.id]

@@ -60,4 +60,5 @@ repos:
           - "#.pre-commit-cache"
           - "#.pytest_cache"
           - "#.venv"
+        files: \.md$
         pass_filenames: false

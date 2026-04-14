@@ -98,6 +98,13 @@ variable "container_app_import_mode" {
   description = "Optional explicit import mode for the reporting service. Leave empty to auto-select azure when storage is configured, otherwise local."
   type        = string
   default     = ""
+
+  validation {
+    # Keep the allowed set in sync with VALID_IMPORT_MODES in
+    # src/psconnmon_service/config.py.  Empty string means "auto-select".
+    condition     = contains(["", "disabled", "local", "azure", "hybrid"], var.container_app_import_mode)
+    error_message = "container_app_import_mode must be one of: '' (auto-select), disabled, local, azure, hybrid."
+  }
 }
 
 variable "container_app_import_interval_seconds" {
@@ -122,6 +129,13 @@ variable "container_app_azure_auth_mode" {
   description = "Azure auth mode used by the reporting service for blob imports."
   type        = string
   default     = "managedIdentity"
+
+  validation {
+    # Keep the allowed set in sync with VALID_AZURE_AUTH_MODES in
+    # src/psconnmon_service/config.py.
+    condition     = contains(["managedIdentity", "sasToken"], var.container_app_azure_auth_mode)
+    error_message = "container_app_azure_auth_mode must be 'managedIdentity' or 'sasToken'."
+  }
 }
 
 variable "container_app_cpu" {
