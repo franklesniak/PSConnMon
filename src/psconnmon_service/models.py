@@ -19,9 +19,7 @@ else:
 
         PYDANTIC_V2 = False
 
-        def field_validator(
-            *fields: str, **kwargs: object
-        ) -> Callable[[Callable[..., Any]], Any]:
+        def field_validator(*fields: str, **kwargs: object) -> Callable[[Callable[..., Any]], Any]:
             """Provide a Pydantic v2-style validator decorator on top of v1."""
 
             return _validator(*fields, **kwargs)
