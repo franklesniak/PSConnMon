@@ -72,7 +72,7 @@ function script:New-PSConnMonTestConfig {
     }
 }
 
-function script:New-PSConnMonLinuxSecretArtifacts {
+function script:New-PSConnMonLinuxSecretArtifact {
     param(
         [Parameter(Mandatory = $true)][string]$TempRoot
     )
@@ -424,7 +424,7 @@ Describe 'Linux auth profile validation' {
     It 'Accepts linuxProfiles, linuxProfileId, and domainAuth targets' {
         $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
         [void](New-Item -Path $tempRoot -ItemType Directory -Force)
-        $secretArtifacts = New-PSConnMonLinuxSecretArtifacts -TempRoot $tempRoot
+        $secretArtifacts = New-PSConnMonLinuxSecretArtifact -TempRoot $tempRoot
         $config = New-PSConnMonTestConfig -TempRoot $tempRoot -EnabledTests @('share', 'domainAuth')
 
         $config.auth.linuxProfiles = @(
@@ -780,7 +780,7 @@ Describe 'Linux share and domain auth probes' {
     It 'Builds keytab-backed Linux share probes with kinit before smbclient' {
         $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
         [void](New-Item -Path $tempRoot -ItemType Directory -Force)
-        $secretArtifacts = New-PSConnMonLinuxSecretArtifacts -TempRoot $tempRoot
+        $secretArtifacts = New-PSConnMonLinuxSecretArtifact -TempRoot $tempRoot
         $config = New-PSConnMonTestConfig -TempRoot $tempRoot -EnabledTests @('share')
         $config.auth.linuxProfiles = @(
             @{
@@ -842,7 +842,7 @@ Describe 'Linux share and domain auth probes' {
     It 'Builds usernamePassword Linux share probes without inline password arguments' {
         $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
         [void](New-Item -Path $tempRoot -ItemType Directory -Force)
-        $secretArtifacts = New-PSConnMonLinuxSecretArtifacts -TempRoot $tempRoot
+        $secretArtifacts = New-PSConnMonLinuxSecretArtifact -TempRoot $tempRoot
         $config = New-PSConnMonTestConfig -TempRoot $tempRoot -EnabledTests @('share')
         $config.auth.linuxProfiles = @(
             @{
@@ -945,7 +945,7 @@ Describe 'Linux share and domain auth probes' {
     It 'Returns successful domainAuth results for keytab-backed Linux probes' {
         $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
         [void](New-Item -Path $tempRoot -ItemType Directory -Force)
-        $secretArtifacts = New-PSConnMonLinuxSecretArtifacts -TempRoot $tempRoot
+        $secretArtifacts = New-PSConnMonLinuxSecretArtifact -TempRoot $tempRoot
         $config = New-PSConnMonTestConfig -TempRoot $tempRoot -EnabledTests @('domainAuth')
         $config.auth.linuxProfiles = @(
             @{
@@ -997,7 +997,7 @@ Describe 'Linux share and domain auth probes' {
     It 'Skips domainAuth for usernamePassword Linux profiles' {
         $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
         [void](New-Item -Path $tempRoot -ItemType Directory -Force)
-        $secretArtifacts = New-PSConnMonLinuxSecretArtifacts -TempRoot $tempRoot
+        $secretArtifacts = New-PSConnMonLinuxSecretArtifact -TempRoot $tempRoot
         $config = New-PSConnMonTestConfig -TempRoot $tempRoot -EnabledTests @('domainAuth')
         $config.auth.linuxProfiles = @(
             @{
@@ -1027,7 +1027,7 @@ Describe 'Linux share and domain auth probes' {
         }
     }
 
-    It 'Treats Linux dig timeout output as a DNS failure instead of a success' {
+    It 'Treats Linux dig timeout output as a DNS failure instead of a success' -Skip:(-not (Get-Command -Name 'dig' -ErrorAction SilentlyContinue)) {
         $tempRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ('psconnmon-' + [guid]::NewGuid().ToString('N'))
         [void](New-Item -Path $tempRoot -ItemType Directory -Force)
         $config = New-PSConnMonTestConfig -TempRoot $tempRoot -EnabledTests @('dns')
