@@ -438,8 +438,49 @@ def test_storage_summary_supports_rolling_window(tmp_path: Path) -> None:
     repository.ingest_events(events)
 
     all_time = repository.get_fleet_summary()
-    recent = repository.get_fleet_summary(window_hours=24)
+    recent = repository.get_fleet_summary(window_minutes=24 * 60)
 
     assert all_time.failure_events == 1
     assert recent.failure_events == 0
     assert recent.total_events == 1
+
+
+def test_storage_normalizes_timestamps_to_utc(tmp_path: Path) -> None:
+    """Repository timestamps should be emitted as timezone-aware UTC values."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    repository.ingest_events(
+        [
+            EventRecord.model_validate(
+                {
+                    "timestampUtc": "2026-04-09T12:00:00Z",
+                    "agentId": "branch-01",
+                    "siteId": "site-a",
+                    "targetId": "fs01",
+                    "fqdn": "fs01.corp.local",
+                    "targetAddress": "10.10.20.15",
+                    "testType": "ping",
+                    "probeName": "Ping.Primary",
+                    "result": "SUCCESS",
+                    "latencyMs": 12.5,
+                    "loss": 0.0,
+                    "errorCode": None,
+                    "details": "Reply from 10.10.20.15",
+                    "dnsServer": None,
+                    "hopIndex": None,
+                    "hopAddress": None,
+                    "hopName": None,
+                    "hopLatencyMs": None,
+                    "pathHash": None,
+                    "metadata": {},
+                }
+            )
+        ]
+    )
+
+    target = repository.list_targets()[0]
+    detail = repository.get_target_detail(target.target_key)
+
+    assert target.last_timestamp_utc.tzinfo == timezone.utc
+    assert detail is not None
+    assert detail.recent_events[0].timestamp_utc.tzinfo == timezone.utc

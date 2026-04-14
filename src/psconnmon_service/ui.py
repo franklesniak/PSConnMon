@@ -78,7 +78,6 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
         .wrap-anywhere,
         .target-meta,
-        .badge,
         .path-change-card dd,
         .import-card dd,
         .detail-panel strong,
@@ -515,24 +514,40 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             color: #fff8ef;
         }
 
+        #detail-status-shell .badge,
+        #detail-status-shell .badge strong {
+            white-space: nowrap;
+            overflow-wrap: normal;
+            word-break: normal;
+        }
+
+        #detail-status-shell .badge {
+            min-width: 144px;
+            justify-content: center;
+            padding-inline: 16px;
+        }
+
         .detail-panel .mini-metrics {
             grid-template-columns: repeat(4, minmax(0, 1fr));
         }
 
         .detail-panel .mini-metrics article {
-            background: rgba(255, 255, 255, 0.06);
-            border-color: rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.035);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-left: 3px solid rgba(255, 214, 176, 0.26);
+            border-radius: 12px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
         }
 
         .detail-chart {
             width: 100%;
-            height: 280px;
+            height: 320px;
             border-radius: 22px;
             background:
                 linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
                 radial-gradient(circle at top left, rgba(196, 111, 43, 0.14), transparent 34%);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            margin: 18px 0;
+            margin: 12px 0 18px;
         }
 
         .detail-copy {
@@ -557,7 +572,6 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             margin-top: 20px;
         }
 
-        .timeline-list,
         .event-list {
             display: grid;
             gap: 10px;
@@ -566,7 +580,6 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             list-style: none;
         }
 
-        .timeline-list li,
         .event-list li {
             padding: 12px 14px;
             border-radius: 18px;
@@ -574,15 +587,14 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
-        .event-list li strong,
-        .timeline-list li strong {
+        .event-list li strong {
             display: block;
             color: #fff8ef;
             margin-bottom: 6px;
         }
 
         .event-meta,
-        .timeline-meta {
+        .chart-meta {
             display: flex;
             flex-wrap: wrap;
             gap: 8px 14px;
@@ -830,9 +842,14 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 <div class="metric-grid" id="metric-grid"></div>
                 <div class="toolbar">
                     <select id="summary-window-filter" aria-label="Summary window">
-                        <option value="24">Last 24 hours</option>
-                        <option value="168">Last 7 days</option>
-                        <option value="720">Last 30 days</option>
+                        <option value="30">Last 30 minutes</option>
+                        <option value="60">Last 1 hour</option>
+                        <option value="120">Last 2 hours</option>
+                        <option value="240">Last 4 hours</option>
+                        <option value="480">Last 8 hours</option>
+                        <option value="1440">Last 24 hours</option>
+                        <option value="10080">Last 7 days</option>
+                        <option value="43200">Last 30 days</option>
                         <option value="0">All imported history</option>
                     </select>
                     <button id="refresh-now-button" type="button">Refresh now</button>
@@ -931,7 +948,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     <div class="panel-head">
                         <div>
                             <h2>Path Changes</h2>
-                            <p>Recent route transitions detected from traceroute history. Each card shows the prior and current path so you can spot drift, then click through to inspect the selected target’s route history.</p>
+                            <p>Recent route transitions detected from traceroute history. Each card shows the prior and current path so you can spot drift, then click through to focus the selected internet target on traceroute results.</p>
                         </div>
                     </div>
                     <div class="path-change-list" id="path-change-list"></div>
@@ -954,15 +971,13 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                         <p class="eyebrow" style="color: rgba(255, 248, 239, 0.7); margin-bottom: 10px;">Selected Target</p>
                         <h2 id="detail-title">Waiting for data</h2>
                         <p class="detail-copy" id="detail-copy">
-                            Pick an internal or internet target to review its assigned tests, latency trend, recent event feed, and traceroute history in one place.
+                            Pick an internal or internet target to review its assigned tests, latency trend, and recent event feed in one place.
                         </p>
                     </div>
                     <div id="detail-status-shell"><div class="badge"><span id="detail-status-label">No target selected</span></div></div>
                 </div>
 
                 <div class="mini-metrics" id="detail-metrics"></div>
-
-                <svg class="detail-chart" id="detail-chart" viewBox="0 0 720 280" role="img" aria-label="Latency timeline"></svg>
 
                 <div class="detail-columns" id="detail-columns">
                     <div class="detail-column">
@@ -979,23 +994,22 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                         <section class="detail-section">
                             <div class="panel-head" style="margin-bottom: 12px;">
                                 <div>
+                                    <h3>Latency Trend</h3>
+                                    <p>The chart uses the selected time window and test filter. Hover a point to inspect its local timestamp, result, and measured latency.</p>
+                                </div>
+                            </div>
+                            <svg class="detail-chart" id="detail-chart" viewBox="0 0 720 320" role="img" aria-label="Latency timeline"></svg>
+                            <div class="chart-meta" id="detail-chart-meta"></div>
+                        </section>
+
+                        <section class="detail-section">
+                            <div class="panel-head" style="margin-bottom: 12px;">
+                                <div>
                                     <h3>Recent Events</h3>
                                     <p>A rolling feed of the latest probe activity, including probe name, result, details, and address-level context for each event.</p>
                                 </div>
                             </div>
                             <ul class="event-list" id="detail-events"></ul>
-                        </section>
-                    </div>
-
-                    <div class="detail-column">
-                        <section class="detail-section" id="detail-path-section">
-                            <div class="panel-head" style="margin-bottom: 12px;">
-                                <div>
-                                    <h3>Path History</h3>
-                                    <p>Recent traceroute summaries for the selected target. Compare route shape, hop count, and path hash over time to diagnose network changes.</p>
-                                </div>
-                            </div>
-                            <ul class="timeline-list" id="detail-paths"></ul>
                         </section>
                     </div>
                 </div>
@@ -1009,7 +1023,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             snapshot: __INITIAL_DATA__,
             selectedTargetKey: null,
             selectedTestType: "all",
-            summaryWindowHours: 24,
+            summaryWindowMinutes: 1440,
             targetDetail: null,
             filters: {
                 search: "",
@@ -1060,19 +1074,37 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
         }
 
         function formatSummaryWindowLabel() {
-            if (dashboardState.summaryWindowHours === 0) {
+            if (dashboardState.summaryWindowMinutes === 0) {
                 return "all imported history";
             }
-            if (dashboardState.summaryWindowHours === 24) {
+            if (dashboardState.summaryWindowMinutes === 30) {
+                return "last 30 minutes";
+            }
+            if (dashboardState.summaryWindowMinutes === 60) {
+                return "last 1 hour";
+            }
+            if (dashboardState.summaryWindowMinutes === 120) {
+                return "last 2 hours";
+            }
+            if (dashboardState.summaryWindowMinutes === 240) {
+                return "last 4 hours";
+            }
+            if (dashboardState.summaryWindowMinutes === 480) {
+                return "last 8 hours";
+            }
+            if (dashboardState.summaryWindowMinutes === 1440) {
                 return "last 24 hours";
             }
-            if (dashboardState.summaryWindowHours === 168) {
+            if (dashboardState.summaryWindowMinutes === 10080) {
                 return "last 7 days";
             }
-            if (dashboardState.summaryWindowHours === 720) {
+            if (dashboardState.summaryWindowMinutes === 43200) {
                 return "last 30 days";
             }
-            return `last ${dashboardState.summaryWindowHours} hours`;
+            if (dashboardState.summaryWindowMinutes < 60) {
+                return `last ${dashboardState.summaryWindowMinutes} minutes`;
+            }
+            return `last ${formatNumber(dashboardState.summaryWindowMinutes / 60, 0)} hours`;
         }
 
         function formatAgo(value) {
@@ -1253,7 +1285,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             dashboardState.isLoading = true;
             try {
                 dashboardState.snapshot = await fetchJson(
-                    `/api/v1/dashboard?summary_window_hours=${dashboardState.summaryWindowHours}`
+                    `/api/v1/dashboard?summary_window_minutes=${dashboardState.summaryWindowMinutes}`
                 );
                 ensureSelectedTarget();
                 renderDashboard();
@@ -1277,7 +1309,9 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             }
 
             try {
-                dashboardState.targetDetail = await fetchJson(`/api/v1/targets/${encodeURIComponent(targetKey)}`);
+                dashboardState.targetDetail = await fetchJson(
+                    `/api/v1/targets/${encodeURIComponent(targetKey)}?window_minutes=${dashboardState.summaryWindowMinutes}`
+                );
             } catch (error) {
                 console.error(error);
                 dashboardState.targetDetail = null;
@@ -1450,7 +1484,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 (status) => `<option value="${escapeHtml(status)}">${escapeHtml(status)}</option>`
             ).join("");
             statusFilter.value = dashboardState.filters.status;
-            summaryWindowFilter.value = String(dashboardState.summaryWindowHours);
+            summaryWindowFilter.value = String(dashboardState.summaryWindowMinutes);
 
             statusRail.innerHTML = STATUS_ORDER.map((status) => {
                 const active = dashboardState.filters.status === status;
@@ -1559,11 +1593,23 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
         function renderPathChanges() {
             const container = document.getElementById("path-change-list");
-            const changes = dashboardState.snapshot.path_changes || [];
+            const visibleTargetKeys = new Set(getFilteredTargets().map((target) => target.target_key));
+            const changes = (dashboardState.snapshot.path_changes || []).filter((change) => {
+                if (change.target_kind !== "external") {
+                    return false;
+                }
+                if (!visibleTargetKeys.has(change.target_key)) {
+                    return false;
+                }
+                if (dashboardState.selectedTargetKey && change.target_key !== dashboardState.selectedTargetKey) {
+                    return false;
+                }
+                return true;
+            });
 
             if (!changes.length) {
                 container.innerHTML =
-                    '<div class="empty-state">No traceroute path changes have been captured yet.</div>';
+                    '<div class="empty-state">No traceroute path changes match the current filters.</div>';
                 return;
             }
 
@@ -1605,29 +1651,29 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             const title = document.getElementById("detail-title");
             const copy = document.getElementById("detail-copy");
             const detailColumns = document.getElementById("detail-columns");
-            const pathSection = document.getElementById("detail-path-section");
             const statusShell = document.getElementById("detail-status-shell");
             const metrics = document.getElementById("detail-metrics");
             const testRail = document.getElementById("detail-test-rail");
             const eventList = document.getElementById("detail-events");
-            const pathList = document.getElementById("detail-paths");
+            const chartMeta = document.getElementById("detail-chart-meta");
 
             if (!detail) {
                 title.textContent = "Waiting for data";
                 copy.textContent =
-                    "Pick an internal or internet target to review its assigned tests, latency trend, recent event feed, and traceroute history in one place.";
+                    "Pick an internal or internet target to review its assigned tests, latency trend, and recent event feed in one place.";
                 statusShell.innerHTML = '<div class="badge"><span id="detail-status-label">No target selected</span></div>';
                 metrics.innerHTML = '<article><span>Selection</span><strong>None</strong></article>';
                 testRail.innerHTML = '<div class="empty-state">No tests available.</div>';
                 eventList.innerHTML = '<li>No recent events available.</li>';
-                pathList.innerHTML = '<li>No path history available.</li>';
-                pathSection.hidden = true;
                 detailColumns.style.gridTemplateColumns = "1fr";
+                chartMeta.innerHTML = "";
                 drawLatencyChart([]);
                 return;
             }
 
-            const availableTests = detail.tests || [];
+            const availableTests = (detail.tests || []).filter(
+                (test) => detail.target.target_kind === "external" || test.test_type !== "traceroute"
+            );
             if (
                 dashboardState.selectedTestType !== "all" &&
                 !availableTests.some((test) => test.test_type === dashboardState.selectedTestType)
@@ -1638,13 +1684,9 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             title.textContent = detail.target.fqdn;
             copy.textContent =
                 detail.target.target_kind === "external"
-                    ? "This view summarizes outbound internet probe behavior for the selected reference endpoint, including internet quality sampling and traceroute drift from the reporting collector."
+                    ? "This view summarizes outbound internet probe behavior for the selected reference endpoint, including internet quality sampling and route changes from the reporting collector."
                     : "This view summarizes host-level connectivity to the selected internal target. Every address, latency, and recent event shown here represents connectivity to that specific host.";
-            pathSection.hidden = detail.target.target_kind !== "external";
-            detailColumns.style.gridTemplateColumns =
-                detail.target.target_kind === "external"
-                    ? "minmax(0, 1.1fr) minmax(0, 0.9fr)"
-                    : "1fr";
+            detailColumns.style.gridTemplateColumns = "1fr";
             statusShell.innerHTML = buildStatusBadge(detail.target.latest_result);
             metrics.innerHTML = [
                 {
@@ -1698,7 +1740,15 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 `
                     <button class="test-chip ${dashboardState.selectedTestType === "all" ? "is-active" : ""}" type="button" data-test-type="all">
                         <strong>All tests</strong>
-                        <span>${escapeHtml(String(detail.recent_events.length || 0))} recent events</span>
+                        <span>${escapeHtml(
+                            String(
+                                (detail.recent_events || []).filter(
+                                    (event) =>
+                                        detail.target.target_kind === "external" ||
+                                        event.test_type !== "traceroute"
+                                ).length || 0
+                            )
+                        )} recent events</span>
                     </button>
                 `,
                 ...availableTests.map(
@@ -1717,8 +1767,11 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
             const visibleEvents = (detail.recent_events || []).filter(
                 (event) =>
-                    dashboardState.selectedTestType === "all" ||
-                    event.test_type === dashboardState.selectedTestType
+                    (detail.target.target_kind === "external" || event.test_type !== "traceroute") &&
+                    (
+                        dashboardState.selectedTestType === "all" ||
+                        event.test_type === dashboardState.selectedTestType
+                    )
             );
 
             eventList.innerHTML = visibleEvents.length
@@ -1744,41 +1797,35 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                       .join("")
                 : "<li>No events recorded for the selected test.</li>";
 
-            pathList.innerHTML = detail.paths.length
-                ? detail.paths
-                      .slice(0, 12)
-                      .map(
-                          (path) => `
-                            <li>
-                                <strong class="wrap-anywhere">${escapeHtml(path.path_preview || path.path_hash)}</strong>
-                                <div class="timeline-meta">
-                                    <span>${escapeHtml(String(path.hop_count))} hops</span>
-                                    <span>${escapeHtml(formatNumber(path.average_hop_latency_ms))} ms avg</span>
-                                    <span>${escapeHtml(path.path_hash)}</span>
-                                    <span>${escapeHtml(formatTimestamp(path.last_seen_utc))}</span>
-                                </div>
-                            </li>
-                        `
-                      )
-                      .join("")
-                : "<li>No traceroute history recorded for this target.</li>";
-
             const filteredSeries = (detail.latency_series || []).filter(
                 (point) =>
-                    dashboardState.selectedTestType === "all" ||
-                    point.test_type === dashboardState.selectedTestType
+                    (detail.target.target_kind === "external" || point.test_type !== "traceroute") &&
+                    (
+                        dashboardState.selectedTestType === "all" ||
+                        point.test_type === dashboardState.selectedTestType
+                    )
             );
+            chartMeta.innerHTML = `
+                <span>Showing ${escapeHtml(formatSummaryWindowLabel())}</span>
+                <span>${escapeHtml(String(filteredSeries.length))} latency samples</span>
+                <span>${escapeHtml(
+                    dashboardState.selectedTestType === "all"
+                        ? "all eligible tests"
+                        : `${dashboardState.selectedTestType} only`
+                )}</span>
+            `;
             drawLatencyChart(filteredSeries);
         }
 
         function drawLatencyChart(series) {
             const chart = document.getElementById("detail-chart");
             const width = 720;
-            const height = 280;
-            const paddingX = 24;
+            const height = 320;
+            const paddingX = 40;
             const paddingY = 18;
+            const axisBottom = 32;
             const innerWidth = width - paddingX * 2;
-            const innerHeight = height - paddingY * 2;
+            const innerHeight = height - paddingY * 2 - axisBottom;
 
             chart.innerHTML = "";
 
@@ -1796,7 +1843,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             const points = series.map((point, index) => {
                 const x = paddingX + (index / Math.max(series.length - 1, 1)) * innerWidth;
                 const latency = Number(point.latency_ms || 0);
-                const y = height - paddingY - (latency / maxLatency) * innerHeight;
+                const y = height - paddingY - axisBottom - (latency / maxLatency) * innerHeight;
                 return { x, y, point };
             });
 
@@ -1813,12 +1860,17 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 `;
             }
 
+            chart.innerHTML += `
+                <line x1="${paddingX}" y1="${height - paddingY - axisBottom}" x2="${width - paddingX}" y2="${height - paddingY - axisBottom}"
+                    stroke="rgba(255,255,255,0.16)" stroke-width="1" />
+            `;
+
             const linePath = points
                 .map((entry, index) => `${index === 0 ? "M" : "L"} ${entry.x.toFixed(1)} ${entry.y.toFixed(1)}`)
                 .join(" ");
             const areaPath = `${linePath} L ${points[points.length - 1].x.toFixed(1)} ${(
-                height - paddingY
-            ).toFixed(1)} L ${points[0].x.toFixed(1)} ${(height - paddingY).toFixed(1)} Z`;
+                height - paddingY - axisBottom
+            ).toFixed(1)} L ${points[0].x.toFixed(1)} ${(height - paddingY - axisBottom).toFixed(1)} Z`;
 
             chart.innerHTML += `
                 <path d="${areaPath}" fill="rgba(196, 111, 43, 0.12)"></path>
@@ -1846,6 +1898,27 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                                 )} ms ${formatTimestamp(entry.point.timestamp_utc)}`
                             )}</title>
                         </circle>
+                    `;
+                })
+                .join("");
+
+            const axisLabelIndexes = [...new Set([0, Math.floor((series.length - 1) / 2), series.length - 1])];
+            chart.innerHTML += axisLabelIndexes
+                .map((index) => {
+                    const point = points[index];
+                    return `
+                        <text x="${point.x.toFixed(1)}" y="${height - paddingY + 8}"
+                            text-anchor="${index === 0 ? "start" : index === series.length - 1 ? "end" : "middle"}"
+                            fill="rgba(247,242,234,0.58)" font-size="11">
+                            ${escapeHtml(
+                                new Date(point.point.timestamp_utc).toLocaleString([], {
+                                    month: "numeric",
+                                    day: "numeric",
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                })
+                            )}
+                        </text>
                     `;
                 })
                 .join("");
@@ -1882,7 +1955,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             });
 
             document.getElementById("summary-window-filter").addEventListener("change", async (event) => {
-                dashboardState.summaryWindowHours = Number(event.target.value || "24");
+                dashboardState.summaryWindowMinutes = Number(event.target.value || "1440");
                 await refreshDashboard({ forceTargetDetail: false });
             });
 

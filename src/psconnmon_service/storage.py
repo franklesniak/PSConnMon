@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import duckdb
@@ -325,13 +325,13 @@ class StorageRepository:
             sources=sources,
         )
 
-    def get_fleet_summary(self, window_hours: int | None = None) -> FleetSummary:
+    def get_fleet_summary(self, window_minutes: int | None = None) -> FleetSummary:
         """Return a one-row aggregated fleet summary."""
 
         where_clause = ""
         parameters: list[object] = []
-        if window_hours is not None:
-            window_start = datetime.utcnow() - timedelta(hours=window_hours)
+        if window_minutes is not None:
+            window_start = datetime.utcnow() - timedelta(minutes=window_minutes)
             where_clause = "WHERE timestamp_utc >= ?"
             parameters.append(window_start)
 
@@ -356,7 +356,7 @@ class StorageRepository:
             active_sites=int(row[3] or 0),
             failure_events=int(row[4] or 0),
             timeout_events=int(row[5] or 0),
-            latest_timestamp_utc=row[6],
+            latest_timestamp_utc=self._normalize_optional_timestamp(row[6]),
         )
 
     def list_targets(self) -> list[TargetSummary]:
@@ -436,7 +436,7 @@ class StorageRepository:
                 last_test_type=row[7],
                 latest_result=row[8],
                 last_latency_ms=row[9],
-                last_timestamp_utc=row[10],
+                    last_timestamp_utc=self._normalize_timestamp(row[10]),
             )
             for row in rows
         ]
@@ -502,7 +502,7 @@ class StorageRepository:
                 failing_targets=int(row[4] or 0),
                 timeout_targets=int(row[5] or 0),
                 average_latency_ms=row[6],
-                last_timestamp_utc=row[7],
+                last_timestamp_utc=self._normalize_timestamp(row[7]),
             )
             for row in rows
         ]
@@ -566,7 +566,7 @@ class StorageRepository:
                 target_count=int(row[2] or 0),
                 failing_targets=int(row[3] or 0),
                 average_latency_ms=row[4],
-                last_timestamp_utc=row[5],
+                last_timestamp_utc=self._normalize_timestamp(row[5]),
             )
             for row in rows
         ]
@@ -628,7 +628,7 @@ class StorageRepository:
                 fqdn=row[4],
                 path_hash=row[5],
                 path_preview=row[6] or "",
-                last_seen_utc=row[7],
+                last_seen_utc=self._normalize_timestamp(row[7]),
                 hop_count=int(row[8] or 0),
                 average_hop_latency_ms=row[9],
             )
@@ -719,15 +719,15 @@ class StorageRepository:
             ordered AS (
                 SELECT
                     target_key,
-                    target_id,
-                    target_kind,
-                    fqdn,
-                    site_id,
-                    agent_id,
-                    path_hash,
-                    path_preview,
-                    hop_count,
-                    timestamp_utc,
+                target_id,
+                target_kind,
+                fqdn,
+                site_id,
+                agent_id,
+                path_hash,
+                path_preview,
+                hop_count,
+                timestamp_utc,
                     LAG(path_hash) OVER (
                         PARTITION BY target_key
                         ORDER BY timestamp_utc
@@ -778,7 +778,12 @@ class StorageRepository:
             for row in rows
         ]
 
-    def get_target_detail(self, target_key: str, timeline_limit: int = 48) -> TargetDetail | None:
+    def get_target_detail(
+        self,
+        target_key: str,
+        timeline_limit: int = 240,
+        window_minutes: int | None = None,
+    ) -> TargetDetail | None:
         """Return a detailed drilldown payload for one target."""
 
         agent_id, separator, target_id = target_key.partition("::")
@@ -789,10 +794,18 @@ class StorageRepository:
         if not targets:
             return None
 
+        time_filter = ""
+        parameters_prefix: list[object] = [agent_id, target_id]
+        if window_minutes is not None:
+            window_start = datetime.utcnow() - timedelta(minutes=window_minutes)
+            time_filter = " AND timestamp_utc >= ?"
+            parameters_prefix.append(window_start)
+
         timeline_query = """
             SELECT timestamp_utc, latency_ms, result, test_type
             FROM events
             WHERE agent_id = ? AND target_id = ? AND latency_ms IS NOT NULL
+        """ + time_filter + """
             ORDER BY timestamp_utc DESC
             LIMIT ?
         """
@@ -812,6 +825,7 @@ class StorageRepository:
                     ) AS row_number
                 FROM events
                 WHERE agent_id = ? AND target_id = ? AND result <> 'INFO'
+        """ + time_filter + """
             )
             SELECT
                 test_type,
@@ -842,6 +856,7 @@ class StorageRepository:
                 metadata
             FROM events
             WHERE agent_id = ? AND target_id = ?
+        """ + time_filter + """
             ORDER BY timestamp_utc DESC
             LIMIT 80
         """
@@ -869,6 +884,7 @@ class StorageRepository:
                     ) AS row_number
                 FROM events
                 WHERE agent_id = ? AND target_id = ? AND test_type = 'traceroute' AND hop_index IS NOT NULL
+        """ + time_filter + """
             )
             SELECT
                 target_key,
@@ -897,20 +913,21 @@ class StorageRepository:
                 timestamp_utc
             FROM events
             WHERE agent_id = ? AND target_id = ? AND result NOT IN ('SUCCESS', 'INFO')
+        """ + time_filter + """
             ORDER BY timestamp_utc DESC
             LIMIT 12
         """
 
         with self._connect() as connection:
             timeline_rows = connection.execute(
-                timeline_query, [agent_id, target_id, timeline_limit]
+                timeline_query, [*parameters_prefix, timeline_limit]
             ).fetchall()
-            test_rows = connection.execute(test_query, [agent_id, target_id]).fetchall()
+            test_rows = connection.execute(test_query, parameters_prefix).fetchall()
             recent_event_rows = connection.execute(
-                recent_event_query, [agent_id, target_id]
+                recent_event_query, parameters_prefix
             ).fetchall()
-            path_rows = connection.execute(path_query, [agent_id, target_id]).fetchall()
-            incident_rows = connection.execute(incident_query, [agent_id, target_id]).fetchall()
+            path_rows = connection.execute(path_query, parameters_prefix).fetchall()
+            incident_rows = connection.execute(incident_query, parameters_prefix).fetchall()
 
         return TargetDetail(
             target=targets[0],
@@ -974,7 +991,7 @@ class StorageRepository:
                     fqdn=row[3],
                     path_hash=row[4],
                     path_preview=row[5] or "",
-                    last_seen_utc=row[6],
+                    last_seen_utc=self._normalize_timestamp(row[6]),
                     hop_count=int(row[7] or 0),
                     average_hop_latency_ms=row[8],
                 )
@@ -1041,7 +1058,9 @@ class StorageRepository:
 
         if value is None:
             raise ValueError("Incident timestamp must not be null.")
-        return value
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     @staticmethod
     def _normalize_optional_timestamp(value: object) -> datetime | None:
@@ -1049,7 +1068,11 @@ class StorageRepository:
 
         if value is None:
             return None
-        return value  # type: ignore[return-value]
+        if not isinstance(value, datetime):
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     @staticmethod
     def _normalize_metadata(value: object) -> dict[str, object]:

@@ -69,6 +69,10 @@ def test_dashboard_and_import_endpoints(tmp_path: Path) -> None:
         assert dashboard_data_response.json()["summary"]["total_agents"] == 1
         assert dashboard_data_response.json()["agents"][0]["agent_id"] == "branch-01"
 
+        minute_window_response = client.get("/api/v1/dashboard?summary_window_minutes=30")
+        assert minute_window_response.status_code == 200
+        assert minute_window_response.json()["summary"]["total_events"] == 0
+
         dashboard_response = client.get("/")
         assert dashboard_response.status_code == 200
         assert "PSConnMon Fleet Board" in dashboard_response.text
@@ -85,9 +89,10 @@ def test_dashboard_and_import_endpoints(tmp_path: Path) -> None:
         assert targets_response.json()[0]["fqdn"] == "fs01.corp.local"
         assert targets_response.json()[0]["agent_id"] == "branch-01"
 
-        target_detail_response = client.get("/api/v1/targets/branch-01%3A%3Afs01")
+        target_detail_response = client.get("/api/v1/targets/branch-01%3A%3Afs01?window_minutes=30")
         assert target_detail_response.status_code == 200
         assert target_detail_response.json()["target"]["fqdn"] == "fs01.corp.local"
+        assert target_detail_response.json()["recent_events"] == []
 
 
 def test_http_ingest_remains_available(tmp_path: Path) -> None:

@@ -44,11 +44,22 @@ def create_app(
     app.state.import_manager = import_manager
     app.state.settings = resolved_settings
 
-    def build_dashboard_snapshot(summary_window_hours: int | None = 24) -> DashboardSnapshot:
+    def resolve_window_minutes(
+        summary_window_minutes: int | None, summary_window_hours: int | None
+    ) -> int | None:
+        """Prefer explicit minute windows while preserving hour-based compatibility."""
+
+        if summary_window_minutes is not None:
+            return summary_window_minutes or None
+        if summary_window_hours is not None:
+            return (summary_window_hours * 60) or None
+        return 24 * 60
+
+    def build_dashboard_snapshot(summary_window_minutes: int | None = 24 * 60) -> DashboardSnapshot:
         """Build the full live-dashboard payload from repository state."""
 
         return DashboardSnapshot(
-            summary=repository.get_fleet_summary(window_hours=summary_window_hours),
+            summary=repository.get_fleet_summary(window_minutes=summary_window_minutes),
             agents=repository.list_agents(),
             sites=repository.list_sites(),
             targets=repository.list_targets(),
@@ -88,14 +99,24 @@ def create_app(
         return repository.get_import_status(resolved_settings.import_mode)
 
     @app.get("/api/v1/summary", response_model=FleetSummary, response_model_by_alias=False)
-    def get_summary(summary_window_hours: int = Query(default=24, ge=0)) -> FleetSummary:
-        return repository.get_fleet_summary(window_hours=summary_window_hours or None)
+    def get_summary(
+        summary_window_minutes: int | None = Query(default=24 * 60, ge=0),
+        summary_window_hours: int | None = Query(default=None, ge=0),
+    ) -> FleetSummary:
+        return repository.get_fleet_summary(
+            window_minutes=resolve_window_minutes(summary_window_minutes, summary_window_hours)
+        )
 
     @app.get("/api/v1/dashboard", response_model=DashboardSnapshot, response_model_by_alias=False)
     def get_dashboard_snapshot(
-        summary_window_hours: int = Query(default=24, ge=0),
+        summary_window_minutes: int | None = Query(default=24 * 60, ge=0),
+        summary_window_hours: int | None = Query(default=None, ge=0),
     ) -> DashboardSnapshot:
-        return build_dashboard_snapshot(summary_window_hours=summary_window_hours or None)
+        return build_dashboard_snapshot(
+            summary_window_minutes=resolve_window_minutes(
+                summary_window_minutes, summary_window_hours
+            )
+        )
 
     @app.get("/api/v1/agents")
     def get_agents() -> list[dict[str, object]]:
@@ -110,8 +131,15 @@ def create_app(
         return [target.model_dump(mode="json") for target in repository.list_targets()]
 
     @app.get("/api/v1/targets/{target_key}", response_model=TargetDetail, response_model_by_alias=False)
-    def get_target_detail(target_key: str) -> TargetDetail:
-        detail = repository.get_target_detail(target_key)
+    def get_target_detail(
+        target_key: str,
+        window_minutes: int | None = Query(default=24 * 60, ge=0),
+        window_hours: int | None = Query(default=None, ge=0),
+    ) -> TargetDetail:
+        detail = repository.get_target_detail(
+            target_key,
+            window_minutes=resolve_window_minutes(window_minutes, window_hours),
+        )
         if detail is None:
             raise HTTPException(status_code=404, detail=f"Unknown target '{target_key}'.")
         return detail
