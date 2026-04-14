@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
+from . import __version__
 from .config import ServiceSettings
 from .importer import ImportManager
 from .models import DashboardSnapshot, FleetSummary, ImportStatus, IngestBatch, TargetDetail
@@ -40,7 +41,7 @@ def create_app(
             if import_task is not None:
                 await import_task
 
-    app = FastAPI(title="PSConnMon", version="0.3.0", lifespan=lifespan)
+    app = FastAPI(title="PSConnMon", version=__version__, lifespan=lifespan)
     app.state.repository = repository
     app.state.import_manager = import_manager
     app.state.settings = resolved_settings
