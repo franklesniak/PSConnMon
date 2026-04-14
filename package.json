@@ -4,7 +4,7 @@
   "description": "A lightweight, cross-platform PowerShell connectivity monitor that continuously tests ICMP, DNS, and SMB against target servers and logs results to CSV",
   "private": true,
   "scripts": {
-    "lint:md": "markdownlint-cli2 \"**/*.md\" \"#node_modules\"",
+    "lint:md": "markdownlint-cli2 \"**/*.md\" \"#node_modules\" \"#.pre-commit-cache\" \"#.pytest_cache\" \"#.venv\"",
     "lint:md:nested": "node .github/scripts/lint-nested-markdown.js"
   },
   "keywords": [

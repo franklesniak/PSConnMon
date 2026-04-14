@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://psconnmon.local/schemas/psconnmon-event.schema.json",
+  "title": "PSConnMon Event v1",
+  "type": "object",
+  "required": [
+    "timestampUtc",
+    "agentId",
+    "siteId",
+    "targetId",
+    "fqdn",
+    "targetAddress",
+    "testType",
+    "probeName",
+    "result",
+    "details",
+    "metadata"
+  ],
+  "properties": {
+    "timestampUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "agentId": {
+      "type": "string"
+    },
+    "siteId": {
+      "type": "string"
+    },
+    "targetId": {
+      "type": "string"
+    },
+    "fqdn": {
+      "type": "string"
+    },
+    "targetAddress": {
+      "type": "string"
+    },
+    "testType": {
+      "type": "string"
+    },
+    "probeName": {
+      "type": "string"
+    },
+    "result": {
+      "type": "string",
+      "enum": ["SUCCESS", "FAILURE", "TIMEOUT", "EMPTY", "SKIPPED", "FATAL", "INFO"]
+    },
+    "latencyMs": {
+      "type": ["number", "null"]
+    },
+    "loss": {
+      "type": ["number", "null"]
+    },
+    "errorCode": {
+      "type": ["string", "null"]
+    },
+    "details": {
+      "type": "string"
+    },
+    "dnsServer": {
+      "type": ["string", "null"]
+    },
+    "hopIndex": {
+      "type": ["integer", "null"]
+    },
+    "hopAddress": {
+      "type": ["string", "null"]
+    },
+    "hopName": {
+      "type": ["string", "null"]
+    },
+    "hopLatencyMs": {
+      "type": ["number", "null"]
+    },
+    "pathHash": {
+      "type": ["string", "null"]
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,2118 @@
+"""HTML rendering helpers for the PSConnMon dashboard."""
+
+from __future__ import annotations
+
+import json
+
+from .models import DashboardSnapshot
+
+DASHBOARD_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PSConnMon</title>
+    <style>
+        :root {
+            --bg: #f3efe7;
+            --surface: rgba(252, 249, 243, 0.9);
+            --surface-strong: rgba(255, 252, 247, 0.96);
+            --surface-dark: #1d2527;
+            --ink: #1a2223;
+            --muted: #5e696b;
+            --line: rgba(26, 34, 35, 0.12);
+            --accent: #c46f2b;
+            --accent-soft: rgba(196, 111, 43, 0.12);
+            --ok: #2f7d57;
+            --warn: #bf8a2b;
+            --bad: #b44336;
+            --timeout: #8a5cf5;
+            --panel-shadow: 0 22px 60px rgba(24, 34, 36, 0.08);
+            --mono: "SFMono-Regular", "IBM Plex Mono", "Cascadia Code", monospace;
+            --sans: "Avenir Next", "Segoe UI", sans-serif;
+            --serif: "Iowan Old Style", "Palatino Linotype", serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: var(--sans);
+            color: var(--ink);
+            background:
+                radial-gradient(circle at 12% 10%, rgba(196, 111, 43, 0.18), transparent 28%),
+                radial-gradient(circle at 88% 12%, rgba(47, 125, 87, 0.18), transparent 24%),
+                linear-gradient(180deg, #fbf7f1 0%, var(--bg) 100%);
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(26, 34, 35, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(26, 34, 35, 0.02) 1px, transparent 1px);
+            background-size: 24px 24px;
+            mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.25), transparent 72%);
+        }
+
+        button,
+        input,
+        select {
+            font: inherit;
+        }
+
+        .shell {
+            max-width: 1520px;
+            margin: 0 auto;
+            padding: 28px 20px 48px;
+        }
+
+        .wrap-anywhere,
+        .target-meta,
+        .path-change-card dd,
+        .import-card dd,
+        .detail-panel strong,
+        .detail-panel span,
+        .target-table td,
+        .agent-card h3,
+        #detail-title {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid rgba(255, 255, 255, 0.75);
+            border-radius: 26px;
+            box-shadow: var(--panel-shadow);
+            backdrop-filter: blur(16px);
+        }
+
+        .banner {
+            padding: 30px 32px 26px;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 20px;
+            border-radius: 30px;
+            background:
+                linear-gradient(135deg, rgba(255, 251, 245, 0.92), rgba(245, 238, 227, 0.82)),
+                radial-gradient(circle at top right, rgba(196, 111, 43, 0.18), transparent 34%);
+            border: 1px solid rgba(196, 111, 43, 0.14);
+            box-shadow: 0 18px 48px rgba(24, 34, 36, 0.06);
+        }
+
+        .banner::after {
+            content: "";
+            position: absolute;
+            inset: -18% -6% auto auto;
+            width: 360px;
+            height: 360px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(196, 111, 43, 0.16), transparent 66%);
+        }
+
+        .eyebrow {
+            margin: 0 0 14px;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            font-size: 0.76rem;
+            color: var(--accent);
+        }
+
+        h1,
+        h2,
+        h3 {
+            font-family: var(--serif);
+            margin: 0;
+        }
+
+        h1 {
+            font-size: clamp(2.6rem, 6vw, 4.7rem);
+            line-height: 0.94;
+            max-width: none;
+            margin-bottom: 8px;
+        }
+
+        .banner-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .banner-copy {
+            max-width: 72ch;
+            line-height: 1.65;
+            color: var(--muted);
+            margin: 10px 0 0;
+        }
+
+        .banner-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 18px;
+        }
+
+        .live-pill,
+        .site-chip,
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 14px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(26, 34, 35, 0.1);
+            color: var(--ink);
+        }
+
+        .live-pill strong,
+        .site-chip strong,
+        .status-chip strong {
+            font-family: var(--mono);
+            font-size: 0.92rem;
+        }
+
+        .pulse {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--ok);
+            box-shadow: 0 0 0 rgba(47, 125, 87, 0.35);
+            animation: pulse 1.8s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(47, 125, 87, 0.35); }
+            70% { box-shadow: 0 0 0 14px rgba(47, 125, 87, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(47, 125, 87, 0); }
+        }
+
+        .banner-lower {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 18px;
+            align-items: end;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .metric-card {
+            padding: 18px;
+            border-radius: 20px;
+            background: var(--surface-strong);
+            border: 1px solid rgba(26, 34, 35, 0.08);
+            min-height: 120px;
+        }
+
+        .metric-card span {
+            display: block;
+            color: var(--muted);
+            font-size: 0.82rem;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .metric-card strong {
+            display: block;
+            font-family: var(--serif);
+            font-size: clamp(1.9rem, 3.5vw, 3rem);
+            line-height: 1;
+        }
+
+        .metric-card small {
+            display: block;
+            margin-top: 10px;
+            color: var(--muted);
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(500px, 1fr);
+            gap: 20px;
+        }
+
+        .stack {
+            display: grid;
+            gap: 20px;
+        }
+
+        .panel {
+            padding: 22px;
+        }
+
+        .panel-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .panel-head p {
+            margin: 6px 0 0;
+            color: var(--muted);
+            line-height: 1.5;
+            max-width: 68ch;
+        }
+
+        .title-band {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+        }
+
+        .agent-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 14px;
+        }
+
+        .agent-card {
+            padding: 18px;
+            border-radius: 22px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(245, 239, 230, 0.92));
+            border: 1px solid rgba(26, 34, 35, 0.1);
+            cursor: pointer;
+            transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+        }
+
+        .agent-card:hover,
+        .agent-card.is-active {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 30px rgba(26, 34, 35, 0.1);
+            border-color: rgba(196, 111, 43, 0.4);
+        }
+
+        .agent-head,
+        .detail-kicker,
+        .mini-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .agent-head h3,
+        .detail-kicker h3 {
+            font-size: 1.2rem;
+        }
+
+        .mono {
+            font-family: var(--mono);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex: 0 0 auto;
+        }
+
+        .status-success { background: var(--ok); }
+        .status-failure { background: var(--bad); }
+        .status-timeout { background: var(--timeout); }
+        .status-empty, .status-skipped { background: var(--warn); }
+        .status-info { background: var(--accent); }
+        .status-unknown { background: var(--muted); }
+
+        .agent-gridbar {
+            display: grid;
+            grid-template-columns: var(--healthy, 1fr) var(--failing, 0fr) var(--timeout, 0fr);
+            height: 10px;
+            gap: 4px;
+            margin: 14px 0 12px;
+        }
+
+        .agent-gridbar span {
+            display: block;
+            border-radius: 999px;
+        }
+
+        .agent-gridbar .ok { background: rgba(47, 125, 87, 0.88); }
+        .agent-gridbar .bad { background: rgba(180, 67, 54, 0.88); }
+        .agent-gridbar .timeout { background: rgba(138, 92, 245, 0.78); }
+
+        .mini-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .mini-metrics article {
+            padding: 10px 12px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.75);
+            border: 1px solid rgba(26, 34, 35, 0.08);
+        }
+
+        .mini-metrics span {
+            display: block;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .mini-metrics strong {
+            font-size: 1.1rem;
+        }
+
+        .site-rail {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .site-chip {
+            cursor: pointer;
+        }
+
+        .site-chip.is-active {
+            background: rgba(196, 111, 43, 0.12);
+            border-color: rgba(196, 111, 43, 0.34);
+        }
+
+        .command-bar {
+            display: grid;
+            grid-template-columns: 1.2fr repeat(3, minmax(0, 0.5fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .field {
+            display: grid;
+            gap: 8px;
+        }
+
+        .field label {
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: var(--muted);
+        }
+
+        .field input,
+        .field select {
+            width: 100%;
+            border: 1px solid rgba(26, 34, 35, 0.12);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.82);
+            padding: 12px 14px;
+            color: var(--ink);
+        }
+
+        .status-rail {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .status-chip {
+            cursor: pointer;
+        }
+
+        .status-chip.is-active {
+            background: rgba(26, 34, 35, 0.88);
+            color: white;
+        }
+
+        .target-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .target-table thead th {
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: var(--muted);
+            padding: 0 0 12px;
+        }
+
+        .target-table tbody tr {
+            cursor: pointer;
+            transition: background 160ms ease, transform 160ms ease;
+        }
+
+        .target-table tbody tr:hover,
+        .target-table tbody tr.is-active {
+            background: rgba(196, 111, 43, 0.08);
+        }
+
+        .target-table td {
+            padding: 14px 10px 14px 0;
+            border-top: 1px solid var(--line);
+            vertical-align: top;
+            min-width: 0;
+        }
+
+        .target-meta {
+            color: var(--muted);
+            font-size: 0.88rem;
+            margin-top: 5px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 11px;
+            border-radius: 999px;
+            font-size: 0.84rem;
+            border: 1px solid rgba(26, 34, 35, 0.08);
+            background: rgba(255, 255, 255, 0.82);
+        }
+
+        .detail-panel {
+            background:
+                linear-gradient(180deg, rgba(29, 37, 39, 0.97), rgba(38, 47, 50, 0.96));
+            color: #f7f2ea;
+            border-radius: 28px;
+            padding: 22px;
+            box-shadow: 0 22px 80px rgba(17, 24, 25, 0.3);
+            min-height: 0;
+        }
+
+        .detail-panel h2,
+        .detail-panel h3 {
+            color: #fff8ef;
+        }
+
+        .detail-panel p,
+        .detail-panel li,
+        .detail-panel small,
+        .detail-panel span {
+            color: rgba(247, 242, 234, 0.78);
+        }
+
+        .detail-panel .badge {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.12);
+            color: #fff8ef;
+        }
+
+        #detail-status-shell .badge,
+        #detail-status-shell .badge strong {
+            white-space: nowrap;
+            overflow-wrap: normal;
+            word-break: normal;
+        }
+
+        #detail-status-shell .badge {
+            min-width: 144px;
+            justify-content: center;
+            padding-inline: 16px;
+        }
+
+        .detail-panel .mini-metrics {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .detail-panel .mini-metrics article {
+            background: rgba(255, 255, 255, 0.035);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-left: 3px solid rgba(255, 214, 176, 0.26);
+            border-radius: 12px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+        }
+
+        .detail-chart {
+            width: 100%;
+            height: 320px;
+            border-radius: 22px;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+                radial-gradient(circle at top left, rgba(196, 111, 43, 0.14), transparent 34%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            margin: 12px 0 18px;
+        }
+
+        .detail-copy {
+            margin: 10px 0 0;
+            max-width: 76ch;
+            line-height: 1.6;
+        }
+
+        .detail-columns {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+            gap: 18px;
+            align-items: start;
+            margin-top: 18px;
+        }
+
+        .detail-column {
+            display: grid;
+            gap: 18px;
+        }
+
+        .detail-column .detail-section:first-child {
+            margin-top: 6px;
+        }
+
+        .detail-section + .detail-section {
+            margin-top: 20px;
+        }
+
+        .event-list {
+            display: grid;
+            gap: 10px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .event-list li {
+            padding: 12px 14px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .event-list li strong {
+            display: block;
+            color: #fff8ef;
+            margin-bottom: 6px;
+        }
+
+        .event-meta,
+        .chart-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 14px;
+            margin-top: 8px;
+            font-size: 0.84rem;
+            color: rgba(247, 242, 234, 0.64);
+        }
+
+        .import-grid,
+        .path-change-list,
+        .test-rail {
+            display: grid;
+            gap: 12px;
+        }
+
+        .test-rail {
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            margin-bottom: 18px;
+        }
+
+        .test-chip {
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.06);
+            color: #fff8ef;
+            padding: 12px 14px;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .test-chip.is-active {
+            background: rgba(196, 111, 43, 0.18);
+            border-color: rgba(255, 214, 176, 0.3);
+        }
+
+        .test-chip span,
+        .test-chip strong {
+            display: block;
+        }
+
+        .test-chip span {
+            margin-top: 6px;
+            font-size: 0.84rem;
+        }
+
+        .import-card,
+        .path-change-card {
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.78);
+            border: 1px solid rgba(26, 34, 35, 0.08);
+        }
+
+        .path-change-card {
+            cursor: pointer;
+            transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+        }
+
+        .path-change-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 26px rgba(26, 34, 35, 0.08);
+            border-color: rgba(196, 111, 43, 0.28);
+        }
+
+        .import-card .mini-meta,
+        .path-change-card .mini-meta {
+            margin-bottom: 10px;
+        }
+
+        .import-card dl,
+        .path-change-card dl {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin: 0;
+        }
+
+        .import-card dt,
+        .path-change-card dt {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--muted);
+        }
+
+        .import-card dd,
+        .path-change-card dd {
+            margin: 4px 0 0;
+            font-family: var(--mono);
+            font-size: 0.9rem;
+        }
+
+        .path-change-summary {
+            margin: 0 0 12px;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
+        .path-lanes {
+            display: grid;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .path-lane {
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: rgba(26, 34, 35, 0.04);
+            border: 1px solid rgba(26, 34, 35, 0.08);
+        }
+
+        .path-lane strong {
+            display: block;
+            font-size: 0.78rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .path-lane code {
+            display: block;
+            font-family: var(--mono);
+            font-size: 0.88rem;
+            color: var(--ink);
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+
+        .path-change-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+
+        .path-change-footer strong {
+            color: var(--accent);
+            font-family: var(--mono);
+            font-size: 0.85rem;
+        }
+
+        .empty-state {
+            padding: 18px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px dashed rgba(26, 34, 35, 0.14);
+            color: var(--muted);
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .toolbar button {
+            border: 1px solid rgba(26, 34, 35, 0.14);
+            border-radius: 999px;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.82);
+            cursor: pointer;
+            transition: background 140ms ease, border-color 140ms ease;
+        }
+
+        .toolbar button:hover {
+            border-color: rgba(196, 111, 43, 0.42);
+            background: rgba(196, 111, 43, 0.09);
+        }
+
+        .toolbar button.is-paused {
+            background: rgba(180, 67, 54, 0.12);
+            border-color: rgba(180, 67, 54, 0.28);
+        }
+
+        .toolbar select {
+            border: 1px solid rgba(26, 34, 35, 0.14);
+            border-radius: 999px;
+            padding: 10px 40px 10px 14px;
+            background: rgba(255, 255, 255, 0.82);
+            color: var(--ink);
+        }
+
+        @media (max-width: 1180px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .banner-lower,
+            .detail-columns {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 760px) {
+            .metric-grid,
+            .command-bar,
+            .mini-metrics {
+                grid-template-columns: 1fr;
+            }
+
+            .banner {
+                padding: 24px 22px 22px;
+            }
+
+            .shell {
+                padding: 18px 14px 32px;
+            }
+
+            .panel,
+            .banner,
+            .detail-panel {
+                border-radius: 22px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <section class="banner">
+            <div class="banner-top">
+                <div>
+                    <p class="eyebrow">Operational Dashboard</p>
+                    <h1>PSConnMon Fleet Board</h1>
+                    <p class="banner-copy">
+                        A live board for collector health, monitored target status, outbound internet probes, and route drift.
+                        Use the fleet cards and tables to pick a target, then review its test history, recent events, and traceroute state below.
+                    </p>
+                </div>
+                <div class="live-pill"><span class="pulse"></span><strong id="refresh-state">Live</strong></div>
+            </div>
+            <div class="banner-meta">
+                <div class="site-chip"><span>Updated</span><strong id="last-refresh-label">--</strong></div>
+                <div class="site-chip"><span>Import mode</span><strong id="import-mode-label">--</strong></div>
+                <div class="site-chip"><span>Timezone</span><strong id="timezone-label">Browser local</strong></div>
+            </div>
+            <div class="banner-lower">
+                <div class="metric-grid" id="metric-grid"></div>
+                <div class="toolbar">
+                    <select id="summary-window-filter" aria-label="Summary window">
+                        <option value="30">Last 30 minutes</option>
+                        <option value="60">Last 1 hour</option>
+                        <option value="120">Last 2 hours</option>
+                        <option value="240">Last 4 hours</option>
+                        <option value="480">Last 8 hours</option>
+                        <option value="1440">Last 24 hours</option>
+                        <option value="10080">Last 7 days</option>
+                        <option value="43200">Last 30 days</option>
+                        <option value="0">All imported history</option>
+                    </select>
+                    <button id="refresh-now-button" type="button">Refresh now</button>
+                    <button id="toggle-refresh-button" type="button">Pause auto-refresh</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="layout">
+            <div class="stack">
+                <article class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Agent Fleet</h2>
+                            <p>Each card summarizes one reporting collector, including its site, target count, and the latest non-informational health state across its assigned checks.</p>
+                        </div>
+                        <div class="badge"><span>Reporting agents</span><strong id="agent-count-label">0</strong></div>
+                    </div>
+                    <div class="agent-grid" id="agent-grid"></div>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Filters</h2>
+                            <p>Filter the board by search text, collector, site, or latest result to isolate a target set before drilling into a specific host or internet endpoint.</p>
+                        </div>
+                    </div>
+                    <div class="site-rail" id="site-rail"></div>
+                    <div class="command-bar">
+                        <div class="field">
+                            <label for="target-search">Search</label>
+                            <input id="target-search" type="search" placeholder="Target name, address, or agent" />
+                        </div>
+                        <div class="field">
+                            <label for="agent-filter">Agent</label>
+                            <select id="agent-filter"></select>
+                        </div>
+                        <div class="field">
+                            <label for="site-filter">Site</label>
+                            <select id="site-filter"></select>
+                        </div>
+                        <div class="field">
+                            <label for="status-filter">Result</label>
+                            <select id="status-filter"></select>
+                        </div>
+                    </div>
+                    <div class="status-rail" id="status-rail"></div>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Internal Targets</h2>
+                            <p>These are monitored internal hosts and services. Each row reflects the latest connectivity result to that specific target address from the reporting collector.</p>
+                        </div>
+                        <div class="badge"><span>Visible hosts</span><strong id="internal-target-count">0</strong></div>
+                    </div>
+                    <table class="target-table">
+                        <thead>
+                            <tr>
+                                <th>Target</th>
+                                <th>Agent / Site</th>
+                                <th>Latest</th>
+                                <th>Latency</th>
+                                <th>Last seen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="internal-target-table-body"></tbody>
+                    </table>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Internet Targets</h2>
+                            <p>These are outbound reference endpoints used for internet quality and traceroute testing. They are independent of internal hosts and summarize egress behavior per collector.</p>
+                        </div>
+                        <div class="badge"><span>Visible internet targets</span><strong id="internet-target-count">0</strong></div>
+                    </div>
+                    <table class="target-table">
+                        <thead>
+                            <tr>
+                                <th>Target</th>
+                                <th>Agent / Site</th>
+                                <th>Latest</th>
+                                <th>Latency</th>
+                                <th>Last seen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="internet-target-table-body"></tbody>
+                    </table>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Path Changes</h2>
+                            <p>Recent route transitions detected from traceroute history. Each card shows the prior and current path so you can spot drift, then click through to focus the selected internet target on traceroute results.</p>
+                        </div>
+                    </div>
+                    <div class="path-change-list" id="path-change-list"></div>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2>Import Health</h2>
+                            <p>Source freshness and backlog are tracked independently from target state.</p>
+                        </div>
+                    </div>
+                    <div class="import-grid" id="import-grid"></div>
+                </article>
+            </div>
+
+            <aside class="detail-panel">
+                <div class="detail-kicker">
+                    <div>
+                        <p class="eyebrow" style="color: rgba(255, 248, 239, 0.7); margin-bottom: 10px;">Selected Target</p>
+                        <h2 id="detail-title">Waiting for data</h2>
+                        <p class="detail-copy" id="detail-copy">
+                            Pick an internal or internet target to review its assigned tests, latency trend, and recent event feed in one place.
+                        </p>
+                    </div>
+                    <div id="detail-status-shell"><div class="badge"><span id="detail-status-label">No target selected</span></div></div>
+                </div>
+
+                <div class="mini-metrics" id="detail-metrics"></div>
+
+                <div class="detail-columns" id="detail-columns">
+                    <div class="detail-column">
+                        <section class="detail-section">
+                            <div class="panel-head" style="margin-bottom: 12px;">
+                                <div>
+                                    <h3>Tests</h3>
+                                    <p>Assigned checks for the selected target. Use these chips to filter the chart and event feed down to one test type.</p>
+                                </div>
+                            </div>
+                            <div class="test-rail" id="detail-test-rail"></div>
+                        </section>
+
+                        <section class="detail-section">
+                            <div class="panel-head" style="margin-bottom: 12px;">
+                                <div>
+                                    <h3>Latency Trend</h3>
+                                    <p>The chart uses the selected time window and test filter. Hover a point to inspect its local timestamp, result, and measured latency.</p>
+                                </div>
+                            </div>
+                            <svg class="detail-chart" id="detail-chart" viewBox="0 0 720 320" role="img" aria-label="Latency timeline"></svg>
+                            <div class="chart-meta" id="detail-chart-meta"></div>
+                        </section>
+
+                        <section class="detail-section">
+                            <div class="panel-head" style="margin-bottom: 12px;">
+                                <div>
+                                    <h3>Recent Events</h3>
+                                    <p>A rolling feed of the latest probe activity, including probe name, result, details, and address-level context for each event.</p>
+                                </div>
+                            </div>
+                            <ul class="event-list" id="detail-events"></ul>
+                        </section>
+                    </div>
+                </div>
+            </aside>
+        </section>
+    </div>
+    <script>
+        const REFRESH_INTERVAL_MS = 15000;
+        const STATUS_ORDER = ["all", "SUCCESS", "FAILURE", "TIMEOUT", "SKIPPED", "EMPTY", "FATAL", "INFO"];
+        const dashboardState = {
+            snapshot: __INITIAL_DATA__,
+            selectedTargetKey: null,
+            selectedTestType: "all",
+            summaryWindowMinutes: 1440,
+            targetDetail: null,
+            filters: {
+                search: "",
+                agent: "all",
+                site: "all",
+                status: "all",
+            },
+            autoRefresh: true,
+            refreshTimer: null,
+            clockTimer: null,
+            isLoading: false,
+        };
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#39;");
+        }
+
+        function formatTimestamp(value) {
+            if (!value) {
+                return "No data";
+            }
+
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return String(value);
+            }
+
+            return date.toLocaleString([], { timeZoneName: "short" });
+        }
+
+        function formatUtcOffset(minutesEastOfUtc) {
+            const totalMinutes = Math.abs(minutesEastOfUtc);
+            const sign = minutesEastOfUtc >= 0 ? "+" : "-";
+            const hours = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
+            const minutes = String(totalMinutes % 60).padStart(2, "0");
+            return `UTC${sign}${hours}:${minutes}`;
+        }
+
+        function getBrowserTimeZoneLabel() {
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Browser local";
+            const minutesEastOfUtc = -new Date().getTimezoneOffset();
+            return `${timeZone} (${formatUtcOffset(minutesEastOfUtc)})`;
+        }
+
+        function formatSummaryWindowLabel() {
+            if (dashboardState.summaryWindowMinutes === 0) {
+                return "all imported history";
+            }
+            if (dashboardState.summaryWindowMinutes === 30) {
+                return "last 30 minutes";
+            }
+            if (dashboardState.summaryWindowMinutes === 60) {
+                return "last 1 hour";
+            }
+            if (dashboardState.summaryWindowMinutes === 120) {
+                return "last 2 hours";
+            }
+            if (dashboardState.summaryWindowMinutes === 240) {
+                return "last 4 hours";
+            }
+            if (dashboardState.summaryWindowMinutes === 480) {
+                return "last 8 hours";
+            }
+            if (dashboardState.summaryWindowMinutes === 1440) {
+                return "last 24 hours";
+            }
+            if (dashboardState.summaryWindowMinutes === 10080) {
+                return "last 7 days";
+            }
+            if (dashboardState.summaryWindowMinutes === 43200) {
+                return "last 30 days";
+            }
+            if (dashboardState.summaryWindowMinutes < 60) {
+                return `last ${dashboardState.summaryWindowMinutes} minutes`;
+            }
+            return `last ${formatNumber(dashboardState.summaryWindowMinutes / 60, 0)} hours`;
+        }
+
+        function formatAgo(value) {
+            if (!value) {
+                return "No data";
+            }
+
+            const deltaMs = Date.now() - new Date(value).getTime();
+            const seconds = Math.max(0, Math.floor(deltaMs / 1000));
+            if (seconds < 60) {
+                return `${seconds}s ago`;
+            }
+
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) {
+                return `${minutes}m ago`;
+            }
+
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) {
+                return `${hours}h ago`;
+            }
+
+            const days = Math.floor(hours / 24);
+            return `${days}d ago`;
+        }
+
+        function formatNumber(value, digits = 1) {
+            if (value === null || value === undefined || value === "") {
+                return "--";
+            }
+
+            const number = Number(value);
+            if (Number.isNaN(number)) {
+                return String(value);
+            }
+
+            return number.toFixed(digits);
+        }
+
+        function sampleSeries(series, maxPoints = 48) {
+            if (series.length <= maxPoints) {
+                return series;
+            }
+
+            const sampled = [];
+            for (let index = 0; index < maxPoints; index += 1) {
+                const sourceIndex = Math.round((index / (maxPoints - 1)) * (series.length - 1));
+                sampled.push(series[sourceIndex]);
+            }
+            return sampled;
+        }
+
+        function getStatusClass(result) {
+            const normalized = String(result || "").toUpperCase();
+            if (normalized === "SUCCESS") {
+                return "status-success";
+            }
+            if (normalized === "FAILURE" || normalized === "FATAL") {
+                return "status-failure";
+            }
+            if (normalized === "TIMEOUT") {
+                return "status-timeout";
+            }
+            if (normalized === "SKIPPED" || normalized === "EMPTY") {
+                return "status-skipped";
+            }
+            if (normalized === "INFO") {
+                return "status-info";
+            }
+            return "status-unknown";
+        }
+
+        function buildStatusBadge(result) {
+            return `
+                <span class="badge">
+                    <span class="status-dot ${getStatusClass(result)}"></span>
+                    <strong>${escapeHtml(result || "UNKNOWN")}</strong>
+                </span>
+            `;
+        }
+
+        function splitPathPreview(value) {
+            return String(value || "")
+                .split("->")
+                .map((segment) => segment.trim())
+                .filter(Boolean);
+        }
+
+        function summarizePathChange(change) {
+            const previous = splitPathPreview(change.previous_path_preview || change.previous_path_hash);
+            const current = splitPathPreview(change.path_preview || change.path_hash);
+            let sharedPrefix = 0;
+
+            while (
+                sharedPrefix < previous.length &&
+                sharedPrefix < current.length &&
+                previous[sharedPrefix] === current[sharedPrefix]
+            ) {
+                sharedPrefix += 1;
+            }
+
+            if (!previous.length || !current.length) {
+                return "Route preview unavailable. Select this card to review traceroute history for the target.";
+            }
+
+            if (sharedPrefix === 0) {
+                return `Route shifted immediately at hop 1. Current path now spans ${current.length} visible hops.`;
+            }
+
+            if (sharedPrefix >= Math.min(previous.length, current.length)) {
+                return `Route length changed after hop ${sharedPrefix}. Current path now spans ${current.length} visible hops.`;
+            }
+
+            return `Route diverged after hop ${sharedPrefix}. Current path now spans ${current.length} visible hops.`;
+        }
+
+        function getFilteredTargets(kind = "all") {
+            const searchTerm = dashboardState.filters.search.trim().toLowerCase();
+
+            return dashboardState.snapshot.targets.filter((target) => {
+                if (kind !== "all" && target.target_kind !== kind) {
+                    return false;
+                }
+
+                if (dashboardState.filters.agent !== "all" && target.agent_id !== dashboardState.filters.agent) {
+                    return false;
+                }
+
+                if (dashboardState.filters.site !== "all" && target.site_id !== dashboardState.filters.site) {
+                    return false;
+                }
+
+                if (
+                    dashboardState.filters.status !== "all" &&
+                    String(target.latest_result).toUpperCase() !== dashboardState.filters.status
+                ) {
+                    return false;
+                }
+
+                if (!searchTerm) {
+                    return true;
+                }
+
+                const haystack = [
+                    target.fqdn,
+                    target.target_address,
+                    target.agent_id,
+                    target.site_id,
+                    target.target_id,
+                ]
+                    .join(" ")
+                    .toLowerCase();
+                return haystack.includes(searchTerm);
+            });
+        }
+
+        function pickDefaultTarget(targets) {
+            return null;
+        }
+
+        function ensureSelectedTarget() {
+            const filteredTargets = getFilteredTargets();
+            if (filteredTargets.some((target) => target.target_key === dashboardState.selectedTargetKey)) {
+                return;
+            }
+
+            dashboardState.selectedTargetKey = pickDefaultTarget(filteredTargets);
+            dashboardState.selectedTestType = "all";
+        }
+
+        async function fetchJson(url, options = undefined) {
+            const response = await fetch(url, {
+                cache: "no-store",
+                headers: { Accept: "application/json" },
+                ...options,
+            });
+
+            if (!response.ok) {
+                throw new Error(`Request failed: ${response.status}`);
+            }
+
+            return response.json();
+        }
+
+        async function refreshDashboard({ forceTargetDetail = true } = {}) {
+            if (dashboardState.isLoading) {
+                return;
+            }
+
+            dashboardState.isLoading = true;
+            try {
+                dashboardState.snapshot = await fetchJson(
+                    `/api/v1/dashboard?summary_window_minutes=${dashboardState.summaryWindowMinutes}`
+                );
+                ensureSelectedTarget();
+                renderDashboard();
+
+                if (forceTargetDetail && dashboardState.selectedTargetKey) {
+                    await refreshTargetDetail(dashboardState.selectedTargetKey);
+                }
+            } catch (error) {
+                console.error(error);
+                document.getElementById("refresh-state").textContent = "Refresh failed";
+            } finally {
+                dashboardState.isLoading = false;
+            }
+        }
+
+        async function refreshTargetDetail(targetKey) {
+            if (!targetKey) {
+                dashboardState.targetDetail = null;
+                renderDetail();
+                return;
+            }
+
+            try {
+                dashboardState.targetDetail = await fetchJson(
+                    `/api/v1/targets/${encodeURIComponent(targetKey)}?window_minutes=${dashboardState.summaryWindowMinutes}`
+                );
+            } catch (error) {
+                console.error(error);
+                dashboardState.targetDetail = null;
+            }
+
+            renderDetail();
+        }
+
+        function renderMetrics() {
+            const summary = dashboardState.snapshot.summary;
+            const metricGrid = document.getElementById("metric-grid");
+            const freshness = formatAgo(summary.latest_timestamp_utc);
+            const internalCount = dashboardState.snapshot.targets.filter((target) => target.target_kind === "internal").length;
+            const externalCount = dashboardState.snapshot.targets.filter((target) => target.target_kind === "external").length;
+
+            metricGrid.innerHTML = [
+                {
+                    label: "Agents",
+                    value: summary.total_agents,
+                    meta: `${summary.active_sites} active sites`,
+                },
+                {
+                    label: "Targets",
+                    value: summary.total_targets,
+                    meta: `${internalCount} internal · ${externalCount} internet`,
+                },
+                {
+                    label: "Failures",
+                    value: summary.failure_events,
+                    meta: `${summary.timeout_events} timeout events · ${formatSummaryWindowLabel()}`,
+                },
+                {
+                    label: "Freshness",
+                    value: freshness,
+                    meta: formatTimestamp(summary.latest_timestamp_utc),
+                },
+            ]
+                .map(
+                    (metric) => `
+                        <article class="metric-card">
+                            <span>${escapeHtml(metric.label)}</span>
+                            <strong>${escapeHtml(metric.value)}</strong>
+                            <small>${escapeHtml(metric.meta)}</small>
+                        </article>
+                    `
+                )
+                .join("");
+
+            document.getElementById("agent-count-label").textContent = String(summary.total_agents);
+            document.getElementById("last-refresh-label").textContent = formatAgo(
+                dashboardState.snapshot.refreshed_utc
+            );
+            document.getElementById("import-mode-label").textContent =
+                dashboardState.snapshot.import_status.mode || "disabled";
+            document.getElementById("timezone-label").textContent = getBrowserTimeZoneLabel();
+        }
+
+        function renderAgents() {
+            const agentGrid = document.getElementById("agent-grid");
+            const agents = dashboardState.snapshot.agents || [];
+
+            if (!agents.length) {
+                agentGrid.innerHTML = '<div class="empty-state">No agents have reported yet.</div>';
+                return;
+            }
+
+            agentGrid.innerHTML = agents
+                .map((agent) => {
+                    const selected = dashboardState.filters.agent === agent.agent_id;
+                    const total = Math.max(agent.total_targets || 1, 1);
+                    const healthy = Math.max(agent.healthy_targets || 0, 0.2);
+                    const failing = Math.max(agent.failing_targets || 0, 0.2);
+                    const timeout = Math.max(agent.timeout_targets || 0, 0.2);
+
+                    return `
+                        <article class="agent-card ${selected ? "is-active" : ""}" data-agent-id="${escapeHtml(
+                            agent.agent_id
+                        )}">
+                            <div class="agent-head">
+                                <div>
+                                    <h3>${escapeHtml(agent.agent_id)}</h3>
+                                    <div class="target-meta">${escapeHtml(agent.site_id)} · ${escapeHtml(
+                                        formatAgo(agent.last_timestamp_utc)
+                                    )}</div>
+                                </div>
+                                ${buildStatusBadge(agent.failing_targets > 0 ? "FAILURE" : "SUCCESS")}
+                            </div>
+                            <div
+                                class="agent-gridbar"
+                                style="--healthy:${healthy}; --failing:${failing}; --timeout:${timeout};"
+                            >
+                                <span class="ok"></span>
+                                <span class="bad"></span>
+                                <span class="timeout"></span>
+                            </div>
+                            <div class="mini-meta mono">
+                                <span>${escapeHtml(String(agent.total_targets))} targets</span>
+                                <span>${escapeHtml(formatNumber(agent.average_latency_ms))} ms avg</span>
+                            </div>
+                            <div class="mini-metrics">
+                                <article><span>Healthy</span><strong>${escapeHtml(
+                                    String(agent.healthy_targets)
+                                )}</strong></article>
+                                <article><span>Failing</span><strong>${escapeHtml(
+                                    String(agent.failing_targets)
+                                )}</strong></article>
+                                <article><span>Timeout</span><strong>${escapeHtml(
+                                    String(agent.timeout_targets)
+                                )}</strong></article>
+                            </div>
+                        </article>
+                    `;
+                })
+                .join("");
+        }
+
+        function renderSites() {
+            const siteRail = document.getElementById("site-rail");
+            const sites = dashboardState.snapshot.sites || [];
+
+            siteRail.innerHTML = [
+                `<button class="site-chip ${dashboardState.filters.site === "all" ? "is-active" : ""}" data-site-id="all" type="button">
+                    <span>All sites</span><strong>${escapeHtml(String(sites.length))}</strong>
+                </button>`,
+                ...sites.map(
+                    (site) => `
+                        <button
+                            class="site-chip ${dashboardState.filters.site === site.site_id ? "is-active" : ""}"
+                            data-site-id="${escapeHtml(site.site_id)}"
+                            type="button"
+                        >
+                            <span>${escapeHtml(site.site_id)}</span>
+                            <strong>${escapeHtml(String(site.target_count))} targets</strong>
+                        </button>
+                    `
+                ),
+            ].join("");
+        }
+
+        function renderFilters() {
+            const agents = dashboardState.snapshot.agents || [];
+            const sites = dashboardState.snapshot.sites || [];
+            const statusFilter = document.getElementById("status-filter");
+            const agentFilter = document.getElementById("agent-filter");
+            const siteFilter = document.getElementById("site-filter");
+            const searchInput = document.getElementById("target-search");
+            const statusRail = document.getElementById("status-rail");
+            const summaryWindowFilter = document.getElementById("summary-window-filter");
+
+            searchInput.value = dashboardState.filters.search;
+
+            agentFilter.innerHTML = [
+                '<option value="all">All agents</option>',
+                ...agents.map(
+                    (agent) =>
+                        `<option value="${escapeHtml(agent.agent_id)}">${escapeHtml(agent.agent_id)}</option>`
+                ),
+            ].join("");
+            agentFilter.value = dashboardState.filters.agent;
+
+            siteFilter.innerHTML = [
+                '<option value="all">All sites</option>',
+                ...sites.map(
+                    (site) => `<option value="${escapeHtml(site.site_id)}">${escapeHtml(site.site_id)}</option>`
+                ),
+            ].join("");
+            siteFilter.value = dashboardState.filters.site;
+
+            statusFilter.innerHTML = STATUS_ORDER.map(
+                (status) => `<option value="${escapeHtml(status)}">${escapeHtml(status)}</option>`
+            ).join("");
+            statusFilter.value = dashboardState.filters.status;
+            summaryWindowFilter.value = String(dashboardState.summaryWindowMinutes);
+
+            statusRail.innerHTML = STATUS_ORDER.map((status) => {
+                const active = dashboardState.filters.status === status;
+                return `
+                    <button
+                        class="status-chip ${active ? "is-active" : ""}"
+                        data-status-id="${escapeHtml(status)}"
+                        type="button"
+                    >
+                        <strong>${escapeHtml(status)}</strong>
+                    </button>
+                `;
+            }).join("");
+        }
+
+        function renderTargetRows(tableBodyId, kind, emptyLabel) {
+            const tableBody = document.getElementById(tableBodyId);
+            const filteredTargets = getFilteredTargets(kind);
+
+            if (!filteredTargets.length) {
+                tableBody.innerHTML =
+                    `<tr><td colspan="5"><div class="empty-state">${escapeHtml(emptyLabel)}</div></td></tr>`;
+                return 0;
+            }
+
+            tableBody.innerHTML = filteredTargets
+                .map(
+                    (target) => `
+                        <tr class="${dashboardState.selectedTargetKey === target.target_key ? "is-active" : ""}" data-target-key="${escapeHtml(
+                            target.target_key
+                        )}">
+                            <td>
+                                <strong class="wrap-anywhere">${escapeHtml(target.fqdn)}</strong>
+                                <div class="target-meta mono wrap-anywhere">${escapeHtml(target.target_address)}</div>
+                            </td>
+                            <td>
+                                <strong class="wrap-anywhere">${escapeHtml(target.agent_id)}</strong>
+                                <div class="target-meta wrap-anywhere">${escapeHtml(target.site_id)}</div>
+                            </td>
+                            <td>
+                                ${buildStatusBadge(target.latest_result)}
+                                <div class="target-meta wrap-anywhere">${escapeHtml(target.last_test_type)}</div>
+                            </td>
+                            <td class="mono">${escapeHtml(formatNumber(target.last_latency_ms))} ms</td>
+                            <td>${escapeHtml(formatAgo(target.last_timestamp_utc))}</td>
+                        </tr>
+                    `
+                )
+                .join("");
+
+            return filteredTargets.length;
+        }
+
+        function renderTargets() {
+            const internalCount = renderTargetRows(
+                "internal-target-table-body",
+                "internal",
+                "No internal targets match the current filters."
+            );
+            const internetCount = renderTargetRows(
+                "internet-target-table-body",
+                "external",
+                "No internet targets match the current filters."
+            );
+
+            document.getElementById("internal-target-count").textContent = String(internalCount);
+            document.getElementById("internet-target-count").textContent = String(internetCount);
+        }
+
+        function renderImportHealth() {
+            const importGrid = document.getElementById("import-grid");
+            const status = dashboardState.snapshot.import_status;
+            const sources = status.sources || [];
+
+            if (!sources.length) {
+                importGrid.innerHTML =
+                    '<div class="empty-state">No import runs recorded yet. The HTTP ingest API remains available.</div>';
+                return;
+            }
+
+            importGrid.innerHTML = sources
+                .map(
+                    (source) => `
+                        <article class="import-card">
+                            <div class="mini-meta">
+                                <strong>${escapeHtml(source.source_type)}</strong>
+                                ${buildStatusBadge(source.last_error ? "FAILURE" : "SUCCESS")}
+                            </div>
+                            <dl>
+                                <div><dt>Last batch</dt><dd>${escapeHtml(
+                                    formatAgo(source.last_imported_batch_utc)
+                                )}</dd></div>
+                                <div><dt>Imported</dt><dd>${escapeHtml(
+                                    String(source.last_run_imported)
+                                )}</dd></div>
+                                <div><dt>Backlog</dt><dd>${escapeHtml(
+                                    String(source.last_run_backlog)
+                                )}</dd></div>
+                                <div><dt>Errors</dt><dd>${escapeHtml(source.last_error || "none")}</dd></div>
+                            </dl>
+                        </article>
+                    `
+                )
+                .join("");
+        }
+
+        function renderPathChanges() {
+            const container = document.getElementById("path-change-list");
+            const visibleTargetKeys = new Set(getFilteredTargets().map((target) => target.target_key));
+            const changes = (dashboardState.snapshot.path_changes || []).filter((change) => {
+                if (change.target_kind !== "external") {
+                    return false;
+                }
+                if (!visibleTargetKeys.has(change.target_key)) {
+                    return false;
+                }
+                if (dashboardState.selectedTargetKey && change.target_key !== dashboardState.selectedTargetKey) {
+                    return false;
+                }
+                return true;
+            });
+
+            if (!changes.length) {
+                container.innerHTML =
+                    '<div class="empty-state">No traceroute path changes match the current filters.</div>';
+                return;
+            }
+
+            container.innerHTML = changes
+                .slice(0, 10)
+                .map((change) => {
+                    const summary = summarizePathChange(change);
+                    return `
+                        <article class="path-change-card" data-target-key="${escapeHtml(change.target_key)}">
+                            <div class="mini-meta">
+                                <strong>${escapeHtml(change.fqdn)}</strong>
+                                <span class="muted">${escapeHtml(change.agent_id)} · ${escapeHtml(
+                                    formatAgo(change.timestamp_utc)
+                                )}</span>
+                            </div>
+                            <p class="path-change-summary">${escapeHtml(summary)}</p>
+                            <div class="path-lanes">
+                                <div class="path-lane">
+                                    <strong>Previous Route</strong>
+                                    <code>${escapeHtml(change.previous_path_preview || change.previous_path_hash)}</code>
+                                </div>
+                                <div class="path-lane">
+                                    <strong>Current Route</strong>
+                                    <code>${escapeHtml(change.path_preview || change.path_hash)}</code>
+                                </div>
+                            </div>
+                            <div class="path-change-footer">
+                                <span>${escapeHtml(change.site_id)} · ${escapeHtml(String(change.hop_count))} hops · ${escapeHtml(formatTimestamp(change.timestamp_utc))}</span>
+                                <strong>Open traceroute detail</strong>
+                            </div>
+                        </article>
+                    `
+                })
+                .join("");
+        }
+
+        function renderDetail() {
+            const detail = dashboardState.targetDetail;
+            const title = document.getElementById("detail-title");
+            const copy = document.getElementById("detail-copy");
+            const detailColumns = document.getElementById("detail-columns");
+            const statusShell = document.getElementById("detail-status-shell");
+            const metrics = document.getElementById("detail-metrics");
+            const testRail = document.getElementById("detail-test-rail");
+            const eventList = document.getElementById("detail-events");
+            const chartMeta = document.getElementById("detail-chart-meta");
+
+            if (!detail) {
+                title.textContent = "Waiting for data";
+                copy.textContent =
+                    "Pick an internal or internet target to review its assigned tests, latency trend, and recent event feed in one place.";
+                statusShell.innerHTML = '<div class="badge"><span id="detail-status-label">No target selected</span></div>';
+                metrics.innerHTML = '<article><span>Selection</span><strong>None</strong></article>';
+                testRail.innerHTML = '<div class="empty-state">No tests available.</div>';
+                eventList.innerHTML = '<li>No recent events available.</li>';
+                detailColumns.style.gridTemplateColumns = "1fr";
+                chartMeta.innerHTML = "";
+                drawLatencyChart([]);
+                return;
+            }
+
+            const availableTests = (detail.tests || []).filter(
+                (test) => detail.target.target_kind === "external" || test.test_type !== "traceroute"
+            );
+            if (
+                dashboardState.selectedTestType !== "all" &&
+                !availableTests.some((test) => test.test_type === dashboardState.selectedTestType)
+            ) {
+                dashboardState.selectedTestType = "all";
+            }
+
+            title.textContent = detail.target.fqdn;
+            copy.textContent =
+                detail.target.target_kind === "external"
+                    ? "This view summarizes outbound internet probe behavior for the selected reference endpoint, including internet quality sampling and route changes from the reporting collector."
+                    : "This view summarizes host-level connectivity to the selected internal target. Every address, latency, and recent event shown here represents connectivity to that specific host.";
+            detailColumns.style.gridTemplateColumns = "1fr";
+            statusShell.innerHTML = buildStatusBadge(detail.target.latest_result);
+            metrics.innerHTML = [
+                {
+                    label: "Agent",
+                    value: detail.target.agent_id,
+                },
+                {
+                    label: "Site",
+                    value: detail.target.site_id,
+                },
+                {
+                    label: "Address",
+                    value: detail.target.target_address,
+                },
+                {
+                    label: "Last seen",
+                    value: formatAgo(detail.target.last_timestamp_utc),
+                },
+                {
+                    label: "Category",
+                    value: detail.target.target_kind,
+                },
+                {
+                    label: "Result",
+                    value: detail.target.latest_result,
+                },
+                {
+                    label: "Last test",
+                    value: detail.target.last_test_type,
+                },
+                {
+                    label: "Latency",
+                    value: `${formatNumber(detail.target.last_latency_ms)} ms`,
+                },
+            ]
+                .map(
+                    (item) => `
+                        <article>
+                            <span>${escapeHtml(item.label)}</span>
+                            <strong>${escapeHtml(item.value)}</strong>
+                        </article>
+                    `
+                )
+                .join("");
+
+            testRail.innerHTML = [
+                `
+                    <button class="test-chip ${dashboardState.selectedTestType === "all" ? "is-active" : ""}" type="button" data-test-type="all">
+                        <strong>All tests</strong>
+                        <span>${escapeHtml(
+                            String(
+                                (detail.recent_events || []).filter(
+                                    (event) =>
+                                        detail.target.target_kind === "external" ||
+                                        event.test_type !== "traceroute"
+                                ).length || 0
+                            )
+                        )} recent events</span>
+                    </button>
+                `,
+                ...availableTests.map(
+                    (test) => `
+                        <button class="test-chip ${dashboardState.selectedTestType === test.test_type ? "is-active" : ""}" type="button" data-test-type="${escapeHtml(
+                            test.test_type
+                        )}">
+                            <strong>${escapeHtml(test.test_type)}</strong>
+                            <span>${escapeHtml(test.latest_result)} · ${escapeHtml(
+                                formatAgo(test.last_timestamp_utc)
+                            )}</span>
+                        </button>
+                    `
+                ),
+            ].join("");
+
+            const visibleEvents = (detail.recent_events || []).filter(
+                (event) =>
+                    (detail.target.target_kind === "external" || event.test_type !== "traceroute") &&
+                    (
+                        dashboardState.selectedTestType === "all" ||
+                        event.test_type === dashboardState.selectedTestType
+                    )
+            );
+
+            eventList.innerHTML = visibleEvents.length
+                ? visibleEvents
+                      .slice(0, 20)
+                      .map(
+                          (event) => `
+                            <li>
+                                <strong>${escapeHtml(event.test_type)} · ${escapeHtml(event.probe_name)} · ${escapeHtml(
+                                    event.result
+                                )}</strong>
+                                <span>${escapeHtml(event.details || event.error_code || "No details")}</span>
+                                <div class="event-meta">
+                                    <span>${escapeHtml(event.target_address)}</span>
+                                    <span>${escapeHtml(formatTimestamp(event.timestamp_utc))}</span>
+                                    <span>${escapeHtml(`${formatNumber(event.latency_ms)} ms`)}</span>
+                                    <span>${escapeHtml(event.error_code || "no error code")}</span>
+                                    <span>${escapeHtml(event.path_hash || "no path hash")}</span>
+                                </div>
+                            </li>
+                        `
+                      )
+                      .join("")
+                : "<li>No events recorded for the selected test.</li>";
+
+            const filteredSeries = (detail.latency_series || []).filter(
+                (point) =>
+                    (detail.target.target_kind === "external" || point.test_type !== "traceroute") &&
+                    (
+                        dashboardState.selectedTestType === "all" ||
+                        point.test_type === dashboardState.selectedTestType
+                    )
+            );
+            const displayedSeries = sampleSeries(filteredSeries, 48);
+            chartMeta.innerHTML = `
+                <span>Showing ${escapeHtml(formatSummaryWindowLabel())}</span>
+                <span>${escapeHtml(String(displayedSeries.length))} plotted of ${escapeHtml(String(filteredSeries.length))} samples</span>
+                <span>${escapeHtml(
+                    dashboardState.selectedTestType === "all"
+                        ? "all eligible tests"
+                        : `${dashboardState.selectedTestType} only`
+                )}</span>
+            `;
+            drawLatencyChart(displayedSeries);
+        }
+
+        function drawLatencyChart(series) {
+            const chart = document.getElementById("detail-chart");
+            const width = 720;
+            const height = 320;
+            const paddingX = 40;
+            const paddingY = 18;
+            const axisBottom = 32;
+            const innerWidth = width - paddingX * 2;
+            const innerHeight = height - paddingY * 2 - axisBottom;
+
+            chart.innerHTML = "";
+
+            if (!series.length) {
+                chart.innerHTML = `
+                    <text x="30" y="44" fill="rgba(247, 242, 234, 0.72)" font-size="14">
+                        No latency history available for the selected target.
+                    </text>
+                `;
+                return;
+            }
+
+            const numericSeries = series.map((point) => Number(point.latency_ms || 0));
+            const maxLatency = Math.max(...numericSeries, 1);
+            const points = series.map((point, index) => {
+                const x = paddingX + (index / Math.max(series.length - 1, 1)) * innerWidth;
+                const latency = Number(point.latency_ms || 0);
+                const y = height - paddingY - axisBottom - (latency / maxLatency) * innerHeight;
+                return { x, y, point };
+            });
+
+            for (let index = 0; index < 4; index += 1) {
+                const y = paddingY + (innerHeight / 3) * index;
+                const label = maxLatency - (maxLatency / 3) * index;
+                chart.innerHTML += `
+                    <line x1="${paddingX}" y1="${y}" x2="${width - paddingX}" y2="${y}"
+                        stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+                    <text x="${width - paddingX}" y="${Math.max(y - 6, 14)}"
+                        text-anchor="end" fill="rgba(247,242,234,0.5)" font-size="11">
+                        ${escapeHtml(formatNumber(label, 0))} ms
+                    </text>
+                `;
+            }
+
+            chart.innerHTML += `
+                <line x1="${paddingX}" y1="${height - paddingY - axisBottom}" x2="${width - paddingX}" y2="${height - paddingY - axisBottom}"
+                    stroke="rgba(255,255,255,0.16)" stroke-width="1" />
+            `;
+
+            const linePath = points
+                .map((entry, index) => `${index === 0 ? "M" : "L"} ${entry.x.toFixed(1)} ${entry.y.toFixed(1)}`)
+                .join(" ");
+            const areaPath = `${linePath} L ${points[points.length - 1].x.toFixed(1)} ${(
+                height - paddingY - axisBottom
+            ).toFixed(1)} L ${points[0].x.toFixed(1)} ${(height - paddingY - axisBottom).toFixed(1)} Z`;
+
+            chart.innerHTML += `
+                <path d="${areaPath}" fill="rgba(196, 111, 43, 0.12)"></path>
+                <path d="${linePath}" fill="none" stroke="rgba(255, 214, 176, 0.95)"
+                    stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+            `;
+
+            chart.innerHTML += points
+                .map((entry) => {
+                    const statusClass = getStatusClass(entry.point.result).replace("status-", "");
+                    const fill = {
+                        success: "#4bd08b",
+                        failure: "#ff7f6f",
+                        timeout: "#b595ff",
+                        skipped: "#ffd073",
+                        info: "#ffbe73",
+                        unknown: "#d5d0ca",
+                    }[statusClass] || "#d5d0ca";
+
+                    return `
+                        <circle cx="${entry.x.toFixed(1)}" cy="${entry.y.toFixed(1)}" r="4.5" fill="${fill}">
+                            <title>${escapeHtml(
+                                `${entry.point.test_type} ${entry.point.result} ${formatNumber(
+                                    entry.point.latency_ms
+                                )} ms ${formatTimestamp(entry.point.timestamp_utc)}`
+                            )}</title>
+                        </circle>
+                    `;
+                })
+                .join("");
+
+            const axisLabelIndexes = [...new Set([0, Math.floor((series.length - 1) / 2), series.length - 1])];
+            chart.innerHTML += axisLabelIndexes
+                .map((index) => {
+                    const point = points[index];
+                    return `
+                        <text x="${point.x.toFixed(1)}" y="${height - paddingY + 8}"
+                            text-anchor="${index === 0 ? "start" : index === series.length - 1 ? "end" : "middle"}"
+                            fill="rgba(247,242,234,0.58)" font-size="11">
+                            ${escapeHtml(
+                                new Date(point.point.timestamp_utc).toLocaleString([], {
+                                    month: "numeric",
+                                    day: "numeric",
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                })
+                            )}
+                        </text>
+                    `;
+                })
+                .join("");
+        }
+
+        function renderDashboard() {
+            renderMetrics();
+            renderAgents();
+            renderSites();
+            renderFilters();
+            renderTargets();
+            renderPathChanges();
+            renderImportHealth();
+            renderRefreshState();
+        }
+
+        function renderRefreshState() {
+            const button = document.getElementById("toggle-refresh-button");
+            const stateLabel = document.getElementById("refresh-state");
+            const refreshed = formatAgo(dashboardState.snapshot.refreshed_utc);
+            stateLabel.textContent = dashboardState.autoRefresh ? `Live · ${refreshed}` : `Paused · ${refreshed}`;
+            button.textContent = dashboardState.autoRefresh ? "Pause auto-refresh" : "Resume auto-refresh";
+            button.classList.toggle("is-paused", !dashboardState.autoRefresh);
+        }
+
+        function bindEvents() {
+            document.getElementById("refresh-now-button").addEventListener("click", async () => {
+                await refreshDashboard();
+            });
+
+            document.getElementById("toggle-refresh-button").addEventListener("click", () => {
+                dashboardState.autoRefresh = !dashboardState.autoRefresh;
+                renderRefreshState();
+            });
+
+            document.getElementById("summary-window-filter").addEventListener("change", async (event) => {
+                dashboardState.summaryWindowMinutes = Number(event.target.value || "1440");
+                await refreshDashboard({ forceTargetDetail: false });
+            });
+
+            document.getElementById("target-search").addEventListener("input", async (event) => {
+                dashboardState.filters.search = event.target.value;
+                ensureSelectedTarget();
+                renderDashboard();
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
+            });
+
+            document.getElementById("agent-filter").addEventListener("change", async (event) => {
+                dashboardState.filters.agent = event.target.value;
+                ensureSelectedTarget();
+                renderDashboard();
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
+            });
+
+            document.getElementById("site-filter").addEventListener("change", async (event) => {
+                dashboardState.filters.site = event.target.value;
+                ensureSelectedTarget();
+                renderDashboard();
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
+            });
+
+            document.getElementById("status-filter").addEventListener("change", async (event) => {
+                dashboardState.filters.status = event.target.value;
+                ensureSelectedTarget();
+                renderDashboard();
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
+            });
+
+            document.getElementById("agent-grid").addEventListener("click", async (event) => {
+                const card = event.target.closest("[data-agent-id]");
+                if (!card) {
+                    return;
+                }
+
+                const agentId = card.dataset.agentId;
+                dashboardState.filters.agent = dashboardState.filters.agent === agentId ? "all" : agentId;
+                ensureSelectedTarget();
+                renderDashboard();
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
+            });
+
+            document.getElementById("site-rail").addEventListener("click", async (event) => {
+                const button = event.target.closest("[data-site-id]");
+                if (!button) {
+                    return;
+                }
+
+                dashboardState.filters.site = button.dataset.siteId || "all";
+                ensureSelectedTarget();
+                renderDashboard();
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
+            });
+
+            document.getElementById("status-rail").addEventListener("click", async (event) => {
+                const button = event.target.closest("[data-status-id]");
+                if (!button) {
+                    return;
+                }
+
+                dashboardState.filters.status = button.dataset.statusId || "all";
+                ensureSelectedTarget();
+                renderDashboard();
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
+            });
+
+            const onTargetTableClick = async (event) => {
+                const row = event.target.closest("[data-target-key]");
+                if (!row) {
+                    return;
+                }
+
+                dashboardState.selectedTargetKey =
+                    dashboardState.selectedTargetKey === row.dataset.targetKey ? null : row.dataset.targetKey;
+                dashboardState.selectedTestType = "all";
+                renderTargets();
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
+            };
+
+            document.getElementById("internal-target-table-body").addEventListener("click", onTargetTableClick);
+            document.getElementById("internet-target-table-body").addEventListener("click", onTargetTableClick);
+
+            document.getElementById("path-change-list").addEventListener("click", async (event) => {
+                const card = event.target.closest("[data-target-key]");
+                if (!card) {
+                    return;
+                }
+
+                dashboardState.selectedTargetKey = card.dataset.targetKey;
+                dashboardState.selectedTestType = "traceroute";
+                renderTargets();
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
+                document.querySelector(".detail-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+
+            document.getElementById("detail-test-rail").addEventListener("click", (event) => {
+                const button = event.target.closest("[data-test-type]");
+                if (!button) {
+                    return;
+                }
+
+                dashboardState.selectedTestType = button.dataset.testType || "all";
+                renderDetail();
+            });
+        }
+
+        function startRefreshLoop() {
+            dashboardState.refreshTimer = window.setInterval(async () => {
+                if (!dashboardState.autoRefresh) {
+                    return;
+                }
+                await refreshDashboard();
+            }, REFRESH_INTERVAL_MS);
+
+            dashboardState.clockTimer = window.setInterval(() => {
+                renderRefreshState();
+            }, 1000);
+        }
+
+        async function bootstrap() {
+            ensureSelectedTarget();
+            renderDashboard();
+            bindEvents();
+            await refreshTargetDetail(dashboardState.selectedTargetKey);
+            startRefreshLoop();
+        }
+
+        bootstrap();
+    </script>
+</body>
+</html>
+"""
+
+
+def render_dashboard(snapshot: DashboardSnapshot) -> str:
+    """Render the built-in PSConnMon dashboard shell."""
+
+    payload = json.dumps(snapshot.model_dump(mode="json"))
+    # Escape embedded </script> sequences to prevent XSS breakout from the
+    # inline <script> block.  Replacing "</" with "<\/" is safe inside JSON
+    # string literals and prevents the HTML parser from seeing a closing tag.
+    safe_payload = payload.replace("</", r"<\/")
+    return DASHBOARD_TEMPLATE.replace("__INITIAL_DATA__", safe_payload)

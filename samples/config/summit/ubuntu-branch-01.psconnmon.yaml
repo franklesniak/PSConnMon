@@ -1,0 +1,80 @@
+schemaVersion: '1.0'
+agent:
+  agentId: ubuntu-branch-01
+  siteId: branch-a
+  spoolDirectory: /var/lib/psconnmon/spool
+  batchSize: 250
+  publishIntervalSeconds: 30
+  configPollIntervalSeconds: 300
+  cycleIntervalSeconds: 30
+  maxRuntimeMinutes: 0
+  cleanupAfterDays: 7
+publish:
+  mode: azure
+  format: jsonl
+  csvMirror: false
+  azure:
+    enabled: true
+    accountName: psconnmondemo01
+    containerName: telemetry
+    blobPrefix: events-v2
+    configBlobPath: configs/ubuntu-branch-01.psconnmon.yaml
+    authMode: sasToken
+    sasToken: 'sp=racwdl&st=2026-04-13T20:52:42Z&se=2026-04-17T05:07:42Z&spr=https&sv=2025-11-05&sr=c&sig=IjTiTM%2BFSBNBhoUs6l7kblXcmhiSXdi4qxmAjmzRO4I%3D'
+tests:
+  enabled:
+    - ping
+    - dns
+    - domainAuth
+    - share
+    - internetQuality
+    - traceroute
+  pingTimeoutMs: 3000
+  pingPacketSize: 56
+  shareAccessTimeoutSeconds: 15
+  tracerouteTimeoutSeconds: 120
+  tracerouteProbeTimeoutSeconds: 3
+  internetQualitySampleCount: 5
+auth:
+  linuxSmbMode: currentContext
+  secretReference: ''
+  linuxProfiles:
+    - id: dc-keytab
+      mode: kerberosKeytab
+      secretReference: ./secrets/dc-keytab.json
+    - id: fileshare-creds
+      mode: usernamePassword
+      secretReference: ./secrets/fileshare-creds.json
+targets:
+  - id: FISHDC01
+    fqdn: FISHDC01.INTERNAL.BLAKECHERRY.COM
+    address: 10.0.100.20
+    linuxProfileId: dc-keytab
+    roles: [domain-controller]
+    tags: [core, auth]
+    dnsServers: [10.0.100.20]
+    shares:
+      - id: sysvol
+        path: '\\FISHDC01.INTERNAL.BLAKECHERRY.COM\SYSVOL'
+    tests: [ping, dns, domainAuth, share]
+  - id: BlakeR710
+    fqdn: Blake-R710.local
+    address: 10.0.100.10
+    roles: [fileserver]
+    tags: [non-domain]
+    dnsServers: [10.0.100.20]
+    shares:
+      - id: public
+        path: '\\10.0.100.10\isos'
+        linuxProfileId: fileshare-creds
+    tests: [ping, share]
+internetTargets:
+  - id: internet-cloudflare
+    name: Cloudflare DNS
+    address: 1.1.1.1
+    tests: [internetQuality, traceroute]
+  - id: internet-google
+    name: Google DNS
+    address: 8.8.8.8
+    tests: [internetQuality, traceroute]
+extensions: []

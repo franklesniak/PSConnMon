@@ -1,0 +1,10 @@
+.git
+.github
+.mypy_cache
+.pytest_cache
+.venv
+__pycache__
+data
+htmlcov
+node_modules
+tests

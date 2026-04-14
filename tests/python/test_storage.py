@@ -1,0 +1,570 @@
+"""Storage tests for the PSConnMon reporting service."""
+
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from psconnmon_service.models import EventRecord
+from psconnmon_service.storage import StorageRepository
+
+
+def test_storage_ingests_and_summarizes_events(tmp_path: Path) -> None:
+    """Repository operations should preserve summary and target state."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    event = EventRecord.model_validate(
+        {
+            "timestampUtc": "2026-04-09T12:00:00Z",
+            "agentId": "branch-01",
+            "siteId": "site-a",
+            "targetId": "fs01",
+            "fqdn": "fs01.corp.local",
+            "targetAddress": "10.10.20.15",
+            "testType": "ping",
+            "probeName": "Ping.Primary",
+            "result": "SUCCESS",
+            "latencyMs": 12.5,
+            "loss": 0.0,
+            "errorCode": None,
+            "details": "Reply from 10.10.20.15",
+            "dnsServer": None,
+            "hopIndex": None,
+            "hopAddress": None,
+            "hopName": None,
+            "hopLatencyMs": None,
+            "pathHash": None,
+            "metadata": {},
+        }
+    )
+
+    inserted = repository.ingest_events([event])
+    summary = repository.get_fleet_summary()
+    targets = repository.list_targets()
+    agents = repository.list_agents()
+
+    assert inserted == 1
+    assert summary.total_events == 1
+    assert summary.total_agents == 1
+    assert summary.total_targets == 1
+    assert targets[0].fqdn == "fs01.corp.local"
+    assert targets[0].agent_id == "branch-01"
+    assert targets[0].target_key == "branch-01::fs01"
+    assert agents[0].agent_id == "branch-01"
+
+
+def test_storage_tracks_import_source_status(tmp_path: Path) -> None:
+    """Import source status should persist backlog and cumulative counters."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    repository.record_import_source_status(
+        source_type="local",
+        discovered=3,
+        imported=2,
+        skipped=1,
+        failed=0,
+        backlog=0,
+        last_error=None,
+        last_source_identifier=str(tmp_path / "import" / "cycle-001.jsonl"),
+        mark_success=True,
+        last_imported_batch_utc=None,
+    )
+
+    status = repository.get_import_status("local")
+
+    assert status.mode == "local"
+    assert status.cumulative_imported == 2
+    assert status.sources[0].source_type == "local"
+    assert status.sources[0].cumulative_skipped == 1
+
+
+def test_storage_ignores_info_events_for_latest_health_state(tmp_path: Path) -> None:
+    """Hop-level INFO events should not replace the target health state."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    events = [
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:00:00Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "edge-01",
+                "fqdn": "edge-01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "ping",
+                "probeName": "Ping.Primary",
+                "result": "SUCCESS",
+                "latencyMs": 12.5,
+                "loss": 0.0,
+                "errorCode": None,
+                "details": "Reply from 10.10.20.15",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:01:00Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "edge-01",
+                "fqdn": "edge-01.corp.local",
+                "targetAddress": "8.8.8.8",
+                "testType": "traceroute",
+                "probeName": "Traceroute.Path",
+                "result": "INFO",
+                "latencyMs": None,
+                "loss": None,
+                "errorCode": None,
+                "details": "1     1 ms     1 ms     1 ms  10.0.100.1",
+                "dnsServer": None,
+                "hopIndex": 1,
+                "hopAddress": "10.0.100.1",
+                "hopName": None,
+                "hopLatencyMs": 1.0,
+                "pathHash": "abc123",
+                "metadata": {"role": "hop"},
+            }
+        ),
+    ]
+
+    repository.ingest_events(events)
+    targets = repository.list_targets()
+    agents = repository.list_agents()
+    sites = repository.list_sites()
+
+    assert targets[0].latest_result == "SUCCESS"
+    assert targets[0].last_test_type == "ping"
+    assert agents[0].healthy_targets == 1
+    assert agents[0].failing_targets == 0
+    assert agents[0].timeout_targets == 0
+    assert sites[0].failing_targets == 0
+
+
+def test_storage_uses_latest_latency_event_for_current_summaries(tmp_path: Path) -> None:
+    """Latest target state and displayed latency should be sourced independently."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    events = [
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:00:00Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "ping",
+                "probeName": "Ping.Primary",
+                "result": "SUCCESS",
+                "latencyMs": 12.5,
+                "loss": 0.0,
+                "errorCode": None,
+                "details": "Reply from 10.10.20.15",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:01:00Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "share",
+                "probeName": "Share.Access",
+                "result": "SUCCESS",
+                "latencyMs": None,
+                "loss": None,
+                "errorCode": None,
+                "details": "Share access confirmed.",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+    ]
+
+    repository.ingest_events(events)
+
+    targets = repository.list_targets()
+    agents = repository.list_agents()
+    sites = repository.list_sites()
+
+    assert targets[0].latest_result == "SUCCESS"
+    assert targets[0].last_test_type == "share"
+    assert targets[0].last_latency_ms == 12.5
+    assert agents[0].average_latency_ms == 12.5
+    assert sites[0].average_latency_ms == 12.5
+
+
+def test_storage_separates_internet_targets_and_exposes_drilldown_data(tmp_path: Path) -> None:
+    """Internet targets should retain their category and drilldown summaries."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    events = [
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:00:00Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "internet-cloudflare",
+                "fqdn": "Cloudflare DNS",
+                "targetAddress": "1.1.1.1",
+                "testType": "internetQuality",
+                "probeName": "InternetQuality.SampleSet",
+                "result": "SUCCESS",
+                "latencyMs": 19.5,
+                "loss": 0.0,
+                "errorCode": None,
+                "details": "Average latency 19.50 ms across 5/5 successful samples.",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {"targetKind": "external", "targetClass": "internet"},
+            }
+        ),
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:01:00Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "internet-cloudflare",
+                "fqdn": "Cloudflare DNS",
+                "targetAddress": "1.1.1.1",
+                "testType": "traceroute",
+                "probeName": "Traceroute.Path",
+                "result": "INFO",
+                "latencyMs": None,
+                "loss": None,
+                "errorCode": None,
+                "details": "1  10.0.100.1  1.000 ms  0.900 ms  0.850 ms",
+                "dnsServer": None,
+                "hopIndex": 1,
+                "hopAddress": "10.0.100.1",
+                "hopName": None,
+                "hopLatencyMs": 1.0,
+                "pathHash": "route-a",
+                "metadata": {"targetKind": "external", "targetClass": "internet", "role": "hop"},
+            }
+        ),
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:01:01Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "internet-cloudflare",
+                "fqdn": "Cloudflare DNS",
+                "targetAddress": "1.1.1.1",
+                "testType": "traceroute",
+                "probeName": "Traceroute.Summary",
+                "result": "SUCCESS",
+                "latencyMs": None,
+                "loss": None,
+                "errorCode": None,
+                "details": "Traceroute completed with 1 hops.",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": "route-a",
+                "metadata": {
+                    "targetKind": "external",
+                    "targetClass": "internet",
+                    "role": "summary",
+                    "hopCount": 1,
+                },
+            }
+        ),
+    ]
+
+    repository.ingest_events(events)
+    targets = repository.list_targets()
+    detail = repository.get_target_detail("branch-01::internet-cloudflare")
+    paths = repository.list_paths()
+
+    assert targets[0].target_kind == "external"
+    assert targets[0].target_key == "branch-01::internet-cloudflare"
+    assert detail is not None
+    assert detail.target.target_kind == "external"
+    assert {test.test_type for test in detail.tests} == {"internetQuality", "traceroute"}
+    assert detail.recent_events[0].metadata["targetClass"] == "internet"
+    assert paths[0].path_preview == "10.0.100.1"
+
+
+def test_storage_keeps_same_target_id_separate_per_agent(tmp_path: Path) -> None:
+    """Targets with the same ID on different agents should not collapse together."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    events = [
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:00:00Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "ping",
+                "probeName": "Ping.Primary",
+                "result": "SUCCESS",
+                "latencyMs": 12.5,
+                "loss": 0.0,
+                "errorCode": None,
+                "details": "Reply from 10.10.20.15",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:01:00Z",
+                "agentId": "branch-02",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "share",
+                "probeName": "Share.Access",
+                "result": "SUCCESS",
+                "latencyMs": None,
+                "loss": None,
+                "errorCode": None,
+                "details": "Share access confirmed.",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+    ]
+
+    repository.ingest_events(events)
+
+    summary = repository.get_fleet_summary()
+    targets = repository.list_targets()
+
+    assert summary.total_targets == 2
+    assert {target.target_key for target in targets} == {"branch-01::fs01", "branch-02::fs01"}
+
+
+def test_storage_summary_supports_rolling_window(tmp_path: Path) -> None:
+    """Fleet summaries should be able to scope counts to a recent rolling window."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    old_timestamp = (now - timedelta(days=3)).isoformat().replace("+00:00", "Z")
+    recent_timestamp = (now - timedelta(hours=2)).isoformat().replace("+00:00", "Z")
+
+    events = [
+        EventRecord.model_validate(
+            {
+                "timestampUtc": old_timestamp,
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "ping",
+                "probeName": "Ping.Primary",
+                "result": "FAILURE",
+                "latencyMs": None,
+                "loss": 100.0,
+                "errorCode": "TimedOut",
+                "details": "Ping timed out.",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+        EventRecord.model_validate(
+            {
+                "timestampUtc": recent_timestamp,
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "ping",
+                "probeName": "Ping.Primary",
+                "result": "SUCCESS",
+                "latencyMs": 10.5,
+                "loss": 0.0,
+                "errorCode": None,
+                "details": "Reply from 10.10.20.15",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+    ]
+
+    repository.ingest_events(events)
+
+    all_time = repository.get_fleet_summary()
+    recent = repository.get_fleet_summary(window_minutes=24 * 60)
+
+    assert all_time.failure_events == 1
+    assert recent.failure_events == 0
+    assert recent.total_events == 1
+
+
+def test_storage_serializes_concurrent_writes_from_multiple_threads(tmp_path: Path) -> None:
+    """Concurrent ingest and import-batch writers should not lose or corrupt rows.
+
+    The FastAPI ingest endpoint runs in the threadpool while the import worker
+    writes from a background thread.  The repository write lock must serialize
+    these paths so every event is persisted exactly once.
+    """
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+
+    def make_event(index: int) -> EventRecord:
+        hours, minutes = divmod(index, 60)
+        return EventRecord.model_validate(
+            {
+                "timestampUtc": f"2026-04-09T{hours:02d}:{minutes:02d}:00Z",
+                "agentId": f"branch-{index:03d}",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "ping",
+                "probeName": "Ping.Primary",
+                "result": "SUCCESS",
+                "latencyMs": 1.0 + index,
+                "loss": 0.0,
+                "errorCode": None,
+                "details": "Reply from 10.10.20.15",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        )
+
+    def ingest_one(index: int) -> int:
+        return repository.ingest_events([make_event(index)])
+
+    def import_batch_one(index: int) -> int:
+        return repository.ingest_import_batch(
+            source_type="local",
+            source_identifier=f"cycle-{index:03d}.jsonl",
+            fingerprint=f"fp-{index:03d}",
+            events=[make_event(index + 100)],
+        )
+
+    def record_status_one(index: int) -> None:
+        repository.record_import_source_status(
+            source_type="local",
+            discovered=1,
+            imported=1,
+            skipped=0,
+            failed=0,
+            backlog=0,
+            last_error=None,
+            last_source_identifier=f"cycle-{index:03d}.jsonl",
+            mark_success=True,
+            last_imported_batch_utc=None,
+        )
+
+    total_ingest = 20
+    total_batches = 10
+    total_status_writes = 5
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        ingest_futures = [pool.submit(ingest_one, index) for index in range(total_ingest)]
+        batch_futures = [pool.submit(import_batch_one, index) for index in range(total_batches)]
+        status_futures = [
+            pool.submit(record_status_one, index) for index in range(total_status_writes)
+        ]
+
+        for future in ingest_futures + batch_futures + status_futures:
+            future.result()
+
+    summary = repository.get_fleet_summary()
+
+    assert summary.total_events == total_ingest + total_batches
+    status = repository.get_import_status("local")
+    assert status.sources[0].cumulative_imported == total_status_writes
+
+
+def test_storage_normalizes_timestamps_to_utc(tmp_path: Path) -> None:
+    """Repository timestamps should be emitted as timezone-aware UTC values."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    repository.ingest_events(
+        [
+            EventRecord.model_validate(
+                {
+                    "timestampUtc": "2026-04-09T12:00:00Z",
+                    "agentId": "branch-01",
+                    "siteId": "site-a",
+                    "targetId": "fs01",
+                    "fqdn": "fs01.corp.local",
+                    "targetAddress": "10.10.20.15",
+                    "testType": "ping",
+                    "probeName": "Ping.Primary",
+                    "result": "SUCCESS",
+                    "latencyMs": 12.5,
+                    "loss": 0.0,
+                    "errorCode": None,
+                    "details": "Reply from 10.10.20.15",
+                    "dnsServer": None,
+                    "hopIndex": None,
+                    "hopAddress": None,
+                    "hopName": None,
+                    "hopLatencyMs": None,
+                    "pathHash": None,
+                    "metadata": {},
+                }
+            )
+        ]
+    )
+
+    target = repository.list_targets()[0]
+    detail = repository.get_target_detail(target.target_key)
+
+    assert target.last_timestamp_utc is not None
+    assert target.last_timestamp_utc.tzinfo == timezone.utc
+    assert detail is not None
+    assert detail.recent_events[0].timestamp_utc.tzinfo == timezone.utc

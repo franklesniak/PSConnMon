@@ -1,0 +1,81 @@
+{
+  "events": [
+    {
+      "timestampUtc": "2026-04-09T20:00:00Z",
+      "agentId": "example-lab-monitor",
+      "siteId": "example-lab",
+      "targetId": "hq-edge",
+      "fqdn": "hq-edge.example.net",
+      "targetAddress": "198.51.100.10",
+      "testType": "ping",
+      "probeName": "Ping.Primary",
+      "result": "SUCCESS",
+      "latencyMs": 11.7,
+      "loss": 0.0,
+      "errorCode": null,
+      "details": "ICMP echo succeeded.",
+      "metadata": {
+        "packetSize": 56
+      }
+    },
+    {
+      "timestampUtc": "2026-04-09T20:00:05Z",
+      "agentId": "example-lab-monitor",
+      "siteId": "example-lab",
+      "targetId": "hq-edge",
+      "fqdn": "hq-edge.example.net",
+      "targetAddress": "198.51.100.10",
+      "testType": "traceroute",
+      "probeName": "Traceroute.Path",
+      "result": "INFO",
+      "latencyMs": null,
+      "loss": null,
+      "errorCode": null,
+      "details": "Hop telemetry recorded.",
+      "hopIndex": 1,
+      "hopAddress": "192.0.2.1",
+      "hopName": "edge-gateway.example.net",
+      "hopLatencyMs": 3.2,
+      "pathHash": "a9f71d04",
+      "metadata": {}
+    },
+    {
+      "timestampUtc": "2026-04-09T20:00:05Z",
+      "agentId": "example-lab-monitor",
+      "siteId": "example-lab",
+      "targetId": "hq-edge",
+      "fqdn": "hq-edge.example.net",
+      "targetAddress": "198.51.100.10",
+      "testType": "traceroute",
+      "probeName": "Traceroute.Path",
+      "result": "INFO",
+      "latencyMs": null,
+      "loss": null,
+      "errorCode": null,
+      "details": "Hop telemetry recorded.",
+      "hopIndex": 2,
+      "hopAddress": "198.51.100.10",
+      "hopName": "hq-edge.example.net",
+      "hopLatencyMs": 11.7,
+      "pathHash": "a9f71d04",
+      "metadata": {}
+    },
+    {
+      "timestampUtc": "2026-04-09T20:01:00Z",
+      "agentId": "example-lab-monitor",
+      "siteId": "example-lab",
+      "targetId": "hq-edge",
+      "fqdn": "hq-edge.example.net",
+      "targetAddress": "198.51.100.10",
+      "testType": "dns",
+      "probeName": "Dns.Primary",
+      "result": "FAILURE",
+      "latencyMs": null,
+      "loss": null,
+      "errorCode": "DNS_LOOKUP_FAILED",
+      "details": "DNS resolution failed from 1.1.1.1.",
+      "dnsServer": "1.1.1.1",
+      "metadata": {}
+    }
+  ]
+}

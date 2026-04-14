@@ -1,15 +1,21 @@
 
-# PSConnMon – Development Roadmap & Conference Readiness
+# PSConnMon – Development Roadmap
 
 - **Status:** Active
 - **Owner:** Repository Maintainers
-- **Last Updated:** 2026-03-26
+- **Last Updated:** 2026-04-09
 - **Scope:** Tracks planned improvements, architectural questions, and feature additions for PSConnMon. Does not cover current functionality or release notes.
-- **Related:** [README](README.md)
+- **Related:** [README](README.md), [Requirements](docs/spec/requirements.md), [Architecture](docs/spec/architecture.md)
 
-This document tracks planned improvements, architectural questions, and feature additions required before presenting **PSConnMon** at a conference.
+This document tracks planned improvements, architectural questions, and feature additions for **PSConnMon**.
 
 The goal is to improve reliability, expand platform support, and introduce centralized telemetry and visualization.
+
+Implementation artifacts for the current delivery cycle are tracked in
+[`docs/spec/requirements.md`](docs/spec/requirements.md) and
+[`docs/spec/architecture.md`](docs/spec/architecture.md). Those documents map
+the implementation plan back to this roadmap and keep the repo's
+contract-first/style guidance explicit.
 
 ---
 
@@ -17,10 +23,10 @@ The goal is to improve reliability, expand platform support, and introduce centr
 
 ### PSScriptAnalyzer / Improvement Factory
 
-- [ ] Update documentation to consistently reference the correct tool name.
-- [ ] Run **PSScriptAnalyzer** across the project.
-- [ ] Address analyzer warnings and enforce recommended patterns.
-- [ ] Establish linting as part of the development workflow.
+- [x] Update documentation to consistently reference the correct tool name.
+- [x] Run **PSScriptAnalyzer** across the project.
+- [x] Address analyzer warnings and enforce recommended patterns.
+- [x] Establish linting as part of the development workflow.
 
 ---
 
@@ -30,10 +36,10 @@ Current behavior may prevent execution if an initial check fails.
 
 Planned improvements:
 
-- [ ] Improve exit logic so tests **run regardless of initial checks**.
-- [ ] Implement a **maximum runtime safeguard**.
-- [ ] Ensure long-running or stalled tests terminate safely.
-- [ ] Improve error handling and reporting for failed checks.
+- [x] Improve exit logic so tests **run regardless of initial checks**.
+- [x] Implement a **maximum runtime safeguard**.
+- [x] Ensure long-running or stalled tests terminate safely.
+- [x] Improve error handling and reporting for failed checks.
 
 ---
 
@@ -43,9 +49,9 @@ The default behavior should support running against **multiple servers**.
 
 Tasks:
 
-- [ ] Default execution should support **1–N targets**.
-- [ ] Ensure output structure includes the **FQDN of each tested server**.
-- [ ] Avoid generic hostnames in output results.
+- [x] Default execution should support **1–N targets**.
+- [x] Ensure output structure includes the **FQDN of each tested server**.
+- [x] Avoid generic hostnames in output results.
 
 ---
 
@@ -55,9 +61,9 @@ Some logic currently differs between connection tests.
 
 Tasks:
 
-- [ ] Validate whether **Domain Controller tests vs File Share tests** require different logic.
-- [ ] Determine whether parameters can be **consolidated into a unified model**.
-- [ ] Simplify input parameters where possible.
+- [x] Validate whether **Domain Controller tests vs File Share tests** require different logic.
+- [x] Determine whether parameters can be **consolidated into a unified model**.
+- [x] Simplify input parameters where possible.
 
 ---
 
@@ -65,7 +71,7 @@ Tasks:
 
 Update the recommended installation command for the required module.
 
-- [ ] Update documentation to use:
+- [x] Update documentation to use:
 
 ```powershell
 Install-Module ThreadJob -Scope CurrentUser -AllowClobber
@@ -85,9 +91,15 @@ Allow PSConnMon to accept **structured configuration input**.
 
 Planned work:
 
-- [ ] Extend input model to support **JSON configuration**.
-- [ ] Support **multiple test targets** via configuration.
-- [ ] Define a JSON schema for connection tests.
+- [x] Extend input model to support **JSON configuration**.
+- [x] Support **multiple test targets** via configuration.
+- [x] Define a JSON schema for connection tests.
+
+Status note:
+
+- Implemented with v1 decision: YAML is the preferred operator format when
+  available; JSON remains a first-class supported format for low-dependency
+  automation.
 
 Example concept:
 
@@ -119,9 +131,9 @@ Concept:
 
 Tasks:
 
-- [ ] Evaluate **Command & Control model** using Azure Storage.
-- [ ] Determine configuration polling interval.
-- [ ] Implement authentication to storage account.
+- [x] Evaluate **Command & Control model** using Azure Storage.
+- [x] Determine configuration polling interval.
+- [x] Implement authentication to storage account.
 
 Possible authentication approaches:
 
@@ -137,10 +149,15 @@ PSConnMon should support both **local logging and centralized telemetry**.
 
 Tasks:
 
-- [ ] Implement **local logging**.
-- [ ] Implement **centralized logging to Azure Storage Account**.
-- [ ] Define structured log format (JSON preferred).
-- [ ] Determine logging frequency.
+- [x] Implement **local logging**.
+- [x] Implement **centralized logging to Azure Storage Account**.
+- [x] Define structured log format (JSON preferred).
+- [x] Determine logging frequency.
+
+Status note:
+
+- Implemented with v1 decision: Azure Blob Storage is the deployed raw
+  telemetry transport, and the reporting service imports batches into DuckDB.
 
 Considerations:
 
@@ -155,9 +172,9 @@ PSConnMon should support **Windows and Linux environments**.
 
 Tasks:
 
-- [ ] Validate functionality on **PowerShell Core**.
-- [ ] Test functionality on **Linux hosts**.
-- [ ] Verify cross-platform equivalents for commands such as:
+- [x] Validate functionality on **PowerShell Core**.
+- [x] Test functionality on **Linux hosts**.
+- [x] Verify cross-platform equivalents for commands such as:
   - DNS testing against **primary DNS server**
   - `Get-ChildItem` file share tests.
 
@@ -171,10 +188,16 @@ Linux support introduces challenges.
 
 Open questions:
 
-- [ ] How should authentication testing work on **Linux clients**?
+- [x] How should authentication testing work on **Linux clients**?
 - [ ] Can **Passthrough authentication** function from domain-joined Ubuntu systems?
 - [ ] Evaluate use of **PowerShell SecretManagement module**.
 - [ ] Determine secure credential storage strategy.
+
+Status note:
+
+- Implemented with v1 decision: built-in Linux SMB probing is `currentContext`
+  only. Credential-backed Linux parity is deferred pending an approved secret
+  storage strategy.
 
 ---
 
@@ -184,8 +207,8 @@ Future enhancements for deeper network diagnostics.
 
 ### Internet Quality Monitoring
 
-- [ ] Implement **internet quality testing**.
-- [ ] Track **latency over time**.
+- [x] Implement **internet quality testing**.
+- [x] Track **latency over time**.
 
 ### Traceroute Hop Tracking
 
@@ -209,8 +232,14 @@ PSConnMon should support **custom testing logic**.
 
 Tasks:
 
-- [ ] Allow users to provide **custom script blocks**.
-- [ ] Support additional tests without modifying the core module.
+- [x] Allow users to provide **custom script blocks**.
+- [x] Support additional tests without modifying the core module.
+
+Status note:
+
+- Implemented with v1 decision: extensions are trusted local PowerShell script
+  files referenced by path. Inline script content from YAML, JSON, or Azure
+  config is not supported.
 
 Example concept:
 
@@ -239,9 +268,15 @@ Considerations:
 
 Tasks:
 
-- [ ] Determine best platform for visualization.
-- [ ] Define ingestion format.
-- [ ] Create example dashboards.
+- [x] Determine best platform for visualization.
+- [x] Define ingestion format.
+- [x] Create example dashboards.
+
+Status note:
+
+- Implemented with v1 decision: DuckDB is the dashboard query store. Azure Blob
+  Storage remains the raw telemetry transport. Azure Log Analytics, TSDB, and
+  Power BI remain future integrations rather than v1 replacements.
 
 ---
 
@@ -249,11 +284,32 @@ Tasks:
 
 These topics require further investigation.
 
-- [ ] Is Azure Storage the optimal telemetry destination?
-- [ ] What is the best **result publishing interval**?
-- [ ] How should configuration distribution work?
+- [x] Is Azure Storage the optimal telemetry destination?
+- [x] What is the best **result publishing interval**?
+- [x] How should configuration distribution work?
+
+Status note:
+
+- These questions are closed for v1 by
+  [`ADR-0002`](docs/adr/ADR-0002-telemetry-and-import-topology.md) and
+  [`ADR-0003`](docs/adr/ADR-0003-extension-trust-boundary.md).
 - [ ] What authentication method should be used for Linux?
 - [ ] How should results be structured for long-term analysis?
+
+---
+
+## Style and Quality Notes
+
+All roadmap work **MUST** continue to follow the repo's coding and documentation
+guidance:
+
+- PowerShell work **MUST** follow
+  [`.github/instructions/powershell.instructions.md`](.github/instructions/powershell.instructions.md)
+- Python work **MUST** follow
+  [`.github/instructions/python.instructions.md`](.github/instructions/python.instructions.md)
+- Documentation work **MUST** follow
+  [`.github/instructions/docs.instructions.md`](.github/instructions/docs.instructions.md)
+- All commits **MUST** pass `pre-commit run --all-files`
 
 ---
 

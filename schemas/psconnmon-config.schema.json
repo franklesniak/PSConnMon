@@ -1,0 +1,289 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://psconnmon.local/schemas/psconnmon-config.schema.json",
+  "title": "PSConnMon Config v1",
+  "type": "object",
+  "required": ["schemaVersion", "agent", "publish", "tests", "auth", "targets", "internetTargets", "extensions"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "agent": {
+      "type": "object",
+      "required": ["agentId", "siteId", "spoolDirectory", "batchSize", "publishIntervalSeconds", "configPollIntervalSeconds", "cycleIntervalSeconds", "maxRuntimeMinutes", "cleanupAfterDays"],
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "siteId": {
+          "type": "string"
+        },
+        "spoolDirectory": {
+          "type": "string"
+        },
+        "batchSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "publishIntervalSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "configPollIntervalSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cycleIntervalSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxRuntimeMinutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cleanupAfterDays": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "publish": {
+      "type": "object",
+      "required": ["mode", "format", "csvMirror", "azure"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["local", "azure", "hybrid"]
+        },
+        "format": {
+          "type": "string",
+          "enum": ["jsonl"]
+        },
+        "csvMirror": {
+          "type": "boolean"
+        },
+        "azure": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "accountName": {
+              "type": "string"
+            },
+            "containerName": {
+              "type": "string"
+            },
+            "blobPrefix": {
+              "type": "string"
+            },
+            "configBlobPath": {
+              "type": "string"
+            },
+            "authMode": {
+              "type": "string",
+              "enum": ["managedIdentity", "sasToken"]
+            },
+            "sasToken": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "required": ["enabled", "pingTimeoutMs", "pingPacketSize", "shareAccessTimeoutSeconds", "tracerouteTimeoutSeconds", "tracerouteProbeTimeoutSeconds", "internetQualitySampleCount"],
+      "properties": {
+        "enabled": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pingTimeoutMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pingPacketSize": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "shareAccessTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tracerouteTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tracerouteProbeTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "internetQualitySampleCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "required": ["linuxSmbMode", "secretReference"],
+      "properties": {
+        "linuxSmbMode": {
+          "type": "string"
+        },
+        "secretReference": {
+          "type": "string"
+        },
+        "linuxProfiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "mode", "secretReference"],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["currentContext", "kerberosKeytab", "usernamePassword"]
+              },
+              "secretReference": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "fqdn", "address", "roles", "tags", "dnsServers", "shares", "tests"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "fqdn": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dnsServers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "shares": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "path"],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "linuxProfileId": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "linuxProfileId": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "internetTargets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "address"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "extensions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "entryPoint": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}
