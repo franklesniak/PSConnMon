@@ -90,14 +90,6 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             word-break: break-word;
         }
 
-        .masthead {
-            display: grid;
-            grid-template-columns: 1.5fr 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .hero,
         .panel {
             background: var(--surface);
             border: 1px solid rgba(255, 255, 255, 0.75);
@@ -106,20 +98,27 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             backdrop-filter: blur(16px);
         }
 
-        .hero {
-            padding: 28px;
+        .banner {
+            padding: 30px 32px 26px;
             position: relative;
             overflow: hidden;
+            margin-bottom: 20px;
+            border-radius: 30px;
+            background:
+                linear-gradient(135deg, rgba(255, 251, 245, 0.92), rgba(245, 238, 227, 0.82)),
+                radial-gradient(circle at top right, rgba(196, 111, 43, 0.18), transparent 34%);
+            border: 1px solid rgba(196, 111, 43, 0.14);
+            box-shadow: 0 18px 48px rgba(24, 34, 36, 0.06);
         }
 
-        .hero::after {
+        .banner::after {
             content: "";
             position: absolute;
-            inset: auto -8% -30% auto;
-            width: 320px;
-            height: 320px;
+            inset: -18% -6% auto auto;
+            width: 360px;
+            height: 360px;
             border-radius: 50%;
-            background: radial-gradient(circle, rgba(196, 111, 43, 0.16), transparent 64%);
+            background: radial-gradient(circle, rgba(196, 111, 43, 0.16), transparent 66%);
         }
 
         .eyebrow {
@@ -144,18 +143,27 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             margin-bottom: 8px;
         }
 
-        .hero-copy {
-            max-width: 60ch;
-            line-height: 1.65;
-            color: var(--muted);
-            margin: 0 0 18px;
+        .banner-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 18px;
         }
 
-        .hero-band {
+        .banner-copy {
+            max-width: 72ch;
+            line-height: 1.65;
+            color: var(--muted);
+            margin: 10px 0 0;
+        }
+
+        .banner-meta {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
             align-items: center;
+            margin-bottom: 18px;
         }
 
         .live-pill,
@@ -193,15 +201,16 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             100% { box-shadow: 0 0 0 0 rgba(47, 125, 87, 0); }
         }
 
-        .hero-aside {
-            padding: 20px;
+        .banner-lower {
             display: grid;
-            gap: 12px;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 18px;
+            align-items: end;
         }
 
         .metric-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 12px;
         }
 
@@ -237,7 +246,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
         .layout {
             display: grid;
-            grid-template-columns: minmax(0, 1.7fr) minmax(340px, 0.9fr);
+            grid-template-columns: minmax(0, 1.2fr) minmax(500px, 1fr);
             gap: 20px;
         }
 
@@ -262,6 +271,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             margin: 6px 0 0;
             color: var(--muted);
             line-height: 1.5;
+            max-width: 68ch;
         }
 
         .title-band {
@@ -478,15 +488,13 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
         }
 
         .detail-panel {
-            position: sticky;
-            top: 20px;
             background:
                 linear-gradient(180deg, rgba(29, 37, 39, 0.97), rgba(38, 47, 50, 0.96));
             color: #f7f2ea;
             border-radius: 28px;
             padding: 22px;
             box-shadow: 0 22px 80px rgba(17, 24, 25, 0.3);
-            min-height: 780px;
+            min-height: 0;
         }
 
         .detail-panel h2,
@@ -507,6 +515,10 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             color: #fff8ef;
         }
 
+        .detail-panel .mini-metrics {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
         .detail-panel .mini-metrics article {
             background: rgba(255, 255, 255, 0.06);
             border-color: rgba(255, 255, 255, 0.12);
@@ -514,13 +526,31 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
         .detail-chart {
             width: 100%;
-            height: 220px;
+            height: 280px;
             border-radius: 22px;
             background:
                 linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
                 radial-gradient(circle at top left, rgba(196, 111, 43, 0.14), transparent 34%);
             border: 1px solid rgba(255, 255, 255, 0.08);
             margin: 18px 0;
+        }
+
+        .detail-copy {
+            margin: 10px 0 0;
+            max-width: 76ch;
+            line-height: 1.6;
+        }
+
+        .detail-columns {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+            gap: 18px;
+            align-items: start;
+        }
+
+        .detail-column {
+            display: grid;
+            gap: 18px;
         }
 
         .detail-section + .detail-section {
@@ -549,6 +579,16 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             display: block;
             color: #fff8ef;
             margin-bottom: 6px;
+        }
+
+        .event-meta,
+        .timeline-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 14px;
+            margin-top: 8px;
+            font-size: 0.84rem;
+            color: rgba(247, 242, 234, 0.64);
         }
 
         .import-grid,
@@ -596,6 +636,17 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             border: 1px solid rgba(26, 34, 35, 0.08);
         }
 
+        .path-change-card {
+            cursor: pointer;
+            transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+        }
+
+        .path-change-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 26px rgba(26, 34, 35, 0.08);
+            border-color: rgba(196, 111, 43, 0.28);
+        }
+
         .import-card .mini-meta,
         .path-change-card .mini-meta {
             margin-bottom: 10px;
@@ -622,6 +673,58 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             margin: 4px 0 0;
             font-family: var(--mono);
             font-size: 0.9rem;
+        }
+
+        .path-change-summary {
+            margin: 0 0 12px;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
+        .path-lanes {
+            display: grid;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .path-lane {
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: rgba(26, 34, 35, 0.04);
+            border: 1px solid rgba(26, 34, 35, 0.08);
+        }
+
+        .path-lane strong {
+            display: block;
+            font-size: 0.78rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .path-lane code {
+            display: block;
+            font-family: var(--mono);
+            font-size: 0.88rem;
+            color: var(--ink);
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+
+        .path-change-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+
+        .path-change-footer strong {
+            color: var(--accent);
+            font-family: var(--mono);
+            font-size: 0.85rem;
         }
 
         .empty-state {
@@ -663,14 +766,13 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
         }
 
         @media (max-width: 1180px) {
-            .masthead,
             .layout {
                 grid-template-columns: 1fr;
             }
 
-            .detail-panel {
-                position: static;
-                min-height: auto;
+            .banner-lower,
+            .detail-columns {
+                grid-template-columns: 1fr;
             }
         }
 
@@ -681,12 +783,16 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 grid-template-columns: 1fr;
             }
 
+            .banner {
+                padding: 24px 22px 22px;
+            }
+
             .shell {
                 padding: 18px 14px 32px;
             }
 
             .panel,
-            .hero,
+            .banner,
             .detail-panel {
                 border-radius: 22px;
             }
@@ -695,24 +801,29 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
     <div class="shell">
-        <section class="masthead">
-            <article class="hero">
-                <div class="title-band">
+        <section class="banner">
+            <div class="banner-top">
+                <div>
+                    <p class="eyebrow">Operational Dashboard</p>
                     <h1>PSConnMon Fleet Board</h1>
-                    <div class="live-pill"><span class="pulse"></span><strong id="refresh-state">Live</strong></div>
+                    <p class="banner-copy">
+                        A live board for collector health, monitored target status, outbound internet probes, and route drift.
+                        Use the fleet cards and tables to pick a target, then review its test history, recent events, and traceroute state below.
+                    </p>
                 </div>
-                <div class="hero-band">
-                    <div class="site-chip"><span>Updated</span><strong id="last-refresh-label">--</strong></div>
-                    <div class="site-chip"><span>Import mode</span><strong id="import-mode-label">--</strong></div>
-                </div>
-            </article>
-            <aside class="hero hero-aside">
+                <div class="live-pill"><span class="pulse"></span><strong id="refresh-state">Live</strong></div>
+            </div>
+            <div class="banner-meta">
+                <div class="site-chip"><span>Updated</span><strong id="last-refresh-label">--</strong></div>
+                <div class="site-chip"><span>Import mode</span><strong id="import-mode-label">--</strong></div>
+            </div>
+            <div class="banner-lower">
                 <div class="metric-grid" id="metric-grid"></div>
                 <div class="toolbar">
                     <button id="refresh-now-button" type="button">Refresh now</button>
                     <button id="toggle-refresh-button" type="button">Pause auto-refresh</button>
                 </div>
-            </aside>
+            </div>
         </section>
 
         <section class="layout">
@@ -721,6 +832,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     <div class="panel-head">
                         <div>
                             <h2>Agent Fleet</h2>
+                            <p>Each card summarizes one reporting collector, including its site, target count, and the latest non-informational health state across its assigned checks.</p>
                         </div>
                         <div class="badge"><span>Reporting agents</span><strong id="agent-count-label">0</strong></div>
                     </div>
@@ -731,6 +843,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     <div class="panel-head">
                         <div>
                             <h2>Filters</h2>
+                            <p>Filter the board by search text, collector, site, or latest result to isolate a target set before drilling into a specific host or internet endpoint.</p>
                         </div>
                     </div>
                     <div class="site-rail" id="site-rail"></div>
@@ -759,6 +872,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     <div class="panel-head">
                         <div>
                             <h2>Internal Targets</h2>
+                            <p>These are monitored internal hosts and services. Each row reflects the latest connectivity result to that specific target address from the reporting collector.</p>
                         </div>
                         <div class="badge"><span>Visible hosts</span><strong id="internal-target-count">0</strong></div>
                     </div>
@@ -780,6 +894,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     <div class="panel-head">
                         <div>
                             <h2>Internet Targets</h2>
+                            <p>These are outbound reference endpoints used for internet quality and traceroute testing. They are independent of internal hosts and summarize egress behavior per collector.</p>
                         </div>
                         <div class="badge"><span>Visible internet targets</span><strong id="internet-target-count">0</strong></div>
                     </div>
@@ -801,6 +916,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     <div class="panel-head">
                         <div>
                             <h2>Path Changes</h2>
+                            <p>Recent route transitions detected from traceroute history. Each card shows the prior and current path so you can spot drift, then click through to inspect the selected target’s route history.</p>
                         </div>
                     </div>
                     <div class="path-change-list" id="path-change-list"></div>
@@ -822,40 +938,52 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     <div>
                         <p class="eyebrow" style="color: rgba(255, 248, 239, 0.7); margin-bottom: 10px;">Selected Target</p>
                         <h2 id="detail-title">Waiting for data</h2>
+                        <p class="detail-copy" id="detail-copy">
+                            Pick an internal or internet target to review its assigned tests, latency trend, recent event feed, and traceroute history in one place.
+                        </p>
                     </div>
                     <div id="detail-status-shell"><div class="badge"><span id="detail-status-label">No target selected</span></div></div>
                 </div>
 
                 <div class="mini-metrics" id="detail-metrics"></div>
 
-                <svg class="detail-chart" id="detail-chart" viewBox="0 0 720 220" role="img" aria-label="Latency timeline"></svg>
+                <svg class="detail-chart" id="detail-chart" viewBox="0 0 720 280" role="img" aria-label="Latency timeline"></svg>
 
-                <section class="detail-section">
-                    <div class="panel-head" style="margin-bottom: 12px;">
-                        <div>
-                            <h3>Tests</h3>
-                        </div>
-                    </div>
-                    <div class="test-rail" id="detail-test-rail"></div>
-                </section>
+                <div class="detail-columns">
+                    <div class="detail-column">
+                        <section class="detail-section">
+                            <div class="panel-head" style="margin-bottom: 12px;">
+                                <div>
+                                    <h3>Tests</h3>
+                                    <p>Assigned checks for the selected target. Use these chips to filter the chart and event feed down to one test type.</p>
+                                </div>
+                            </div>
+                            <div class="test-rail" id="detail-test-rail"></div>
+                        </section>
 
-                <section class="detail-section">
-                    <div class="panel-head" style="margin-bottom: 12px;">
-                        <div>
-                            <h3>Recent events</h3>
-                        </div>
+                        <section class="detail-section">
+                            <div class="panel-head" style="margin-bottom: 12px;">
+                                <div>
+                                    <h3>Recent Events</h3>
+                                    <p>A rolling feed of the latest probe activity, including probe name, result, details, and address-level context for each event.</p>
+                                </div>
+                            </div>
+                            <ul class="event-list" id="detail-events"></ul>
+                        </section>
                     </div>
-                    <ul class="event-list" id="detail-events"></ul>
-                </section>
 
-                <section class="detail-section">
-                    <div class="panel-head" style="margin-bottom: 12px;">
-                        <div>
-                            <h3>Path history</h3>
-                        </div>
+                    <div class="detail-column">
+                        <section class="detail-section">
+                            <div class="panel-head" style="margin-bottom: 12px;">
+                                <div>
+                                    <h3>Path History</h3>
+                                    <p>Recent traceroute summaries for the selected target. Compare route shape, hop count, and path hash over time to diagnose network changes.</p>
+                                </div>
+                            </div>
+                            <ul class="timeline-list" id="detail-paths"></ul>
+                        </section>
                     </div>
-                    <ul class="timeline-list" id="detail-paths"></ul>
-                </section>
+                </div>
             </aside>
         </section>
     </div>
@@ -864,7 +992,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
         const STATUS_ORDER = ["all", "SUCCESS", "FAILURE", "TIMEOUT", "SKIPPED", "EMPTY", "FATAL", "INFO"];
         const dashboardState = {
             snapshot: __INITIAL_DATA__,
-            selectedTargetId: null,
+            selectedTargetKey: null,
             selectedTestType: "all",
             targetDetail: null,
             filters: {
@@ -968,6 +1096,41 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             `;
         }
 
+        function splitPathPreview(value) {
+            return String(value || "")
+                .split("->")
+                .map((segment) => segment.trim())
+                .filter(Boolean);
+        }
+
+        function summarizePathChange(change) {
+            const previous = splitPathPreview(change.previous_path_preview || change.previous_path_hash);
+            const current = splitPathPreview(change.path_preview || change.path_hash);
+            let sharedPrefix = 0;
+
+            while (
+                sharedPrefix < previous.length &&
+                sharedPrefix < current.length &&
+                previous[sharedPrefix] === current[sharedPrefix]
+            ) {
+                sharedPrefix += 1;
+            }
+
+            if (!previous.length || !current.length) {
+                return "Route preview unavailable. Select this card to review traceroute history for the target.";
+            }
+
+            if (sharedPrefix === 0) {
+                return `Route shifted immediately at hop 1. Current path now spans ${current.length} visible hops.`;
+            }
+
+            if (sharedPrefix >= Math.min(previous.length, current.length)) {
+                return `Route length changed after hop ${sharedPrefix}. Current path now spans ${current.length} visible hops.`;
+            }
+
+            return `Route diverged after hop ${sharedPrefix}. Current path now spans ${current.length} visible hops.`;
+        }
+
         function getFilteredTargets(kind = "all") {
             const searchTerm = dashboardState.filters.search.trim().toLowerCase();
 
@@ -1014,16 +1177,16 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             }
 
             const degraded = targets.find((target) => String(target.latest_result).toUpperCase() !== "SUCCESS");
-            return (degraded || targets[0]).target_id;
+            return (degraded || targets[0]).target_key;
         }
 
         function ensureSelectedTarget() {
             const filteredTargets = getFilteredTargets();
-            if (filteredTargets.some((target) => target.target_id === dashboardState.selectedTargetId)) {
+            if (filteredTargets.some((target) => target.target_key === dashboardState.selectedTargetKey)) {
                 return;
             }
 
-            dashboardState.selectedTargetId = pickDefaultTarget(filteredTargets);
+            dashboardState.selectedTargetKey = pickDefaultTarget(filteredTargets);
             dashboardState.selectedTestType = "all";
         }
 
@@ -1052,8 +1215,8 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 ensureSelectedTarget();
                 renderDashboard();
 
-                if (forceTargetDetail && dashboardState.selectedTargetId) {
-                    await refreshTargetDetail(dashboardState.selectedTargetId);
+                if (forceTargetDetail && dashboardState.selectedTargetKey) {
+                    await refreshTargetDetail(dashboardState.selectedTargetKey);
                 }
             } catch (error) {
                 console.error(error);
@@ -1063,15 +1226,15 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             }
         }
 
-        async function refreshTargetDetail(targetId) {
-            if (!targetId) {
+        async function refreshTargetDetail(targetKey) {
+            if (!targetKey) {
                 dashboardState.targetDetail = null;
                 renderDetail();
                 return;
             }
 
             try {
-                dashboardState.targetDetail = await fetchJson(`/api/v1/targets/${encodeURIComponent(targetId)}`);
+                dashboardState.targetDetail = await fetchJson(`/api/v1/targets/${encodeURIComponent(targetKey)}`);
             } catch (error) {
                 console.error(error);
                 dashboardState.targetDetail = null;
@@ -1122,10 +1285,10 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
             document.getElementById("agent-count-label").textContent = String(summary.total_agents);
             document.getElementById("last-refresh-label").textContent = formatAgo(
-                dashboardState.snapshot.refreshedUtc
+                dashboardState.snapshot.refreshed_utc
             );
             document.getElementById("import-mode-label").textContent =
-                dashboardState.snapshot.importStatus.mode || "disabled";
+                dashboardState.snapshot.import_status.mode || "disabled";
         }
 
         function renderAgents() {
@@ -1270,8 +1433,8 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             tableBody.innerHTML = filteredTargets
                 .map(
                     (target) => `
-                        <tr class="${dashboardState.selectedTargetId === target.target_id ? "is-active" : ""}" data-target-id="${escapeHtml(
-                            target.target_id
+                        <tr class="${dashboardState.selectedTargetKey === target.target_key ? "is-active" : ""}" data-target-key="${escapeHtml(
+                            target.target_key
                         )}">
                             <td>
                                 <strong class="wrap-anywhere">${escapeHtml(target.fqdn)}</strong>
@@ -1313,7 +1476,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
         function renderImportHealth() {
             const importGrid = document.getElementById("import-grid");
-            const status = dashboardState.snapshot.importStatus;
+            const status = dashboardState.snapshot.import_status;
             const sources = status.sources || [];
 
             if (!sources.length) {
@@ -1360,30 +1523,41 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
             container.innerHTML = changes
                 .slice(0, 10)
-                .map(
-                    (change) => `
-                        <article class="path-change-card" data-target-id="${escapeHtml(change.target_id)}">
+                .map((change) => {
+                    const summary = summarizePathChange(change);
+                    return `
+                        <article class="path-change-card" data-target-key="${escapeHtml(change.target_key)}">
                             <div class="mini-meta">
                                 <strong>${escapeHtml(change.fqdn)}</strong>
                                 <span class="muted">${escapeHtml(change.agent_id)} · ${escapeHtml(
                                     formatAgo(change.timestamp_utc)
                                 )}</span>
                             </div>
-                            <dl>
-                                <div><dt>Previous path</dt><dd>${escapeHtml(change.previous_path_preview || change.previous_path_hash)}</dd></div>
-                                <div><dt>Current path</dt><dd>${escapeHtml(change.path_preview || change.path_hash)}</dd></div>
-                                <div><dt>Hops</dt><dd>${escapeHtml(String(change.hop_count))}</dd></div>
-                                <div><dt>Hashes</dt><dd>${escapeHtml(`${change.previous_path_hash} → ${change.path_hash}`)}</dd></div>
-                            </dl>
+                            <p class="path-change-summary">${escapeHtml(summary)}</p>
+                            <div class="path-lanes">
+                                <div class="path-lane">
+                                    <strong>Previous Route</strong>
+                                    <code>${escapeHtml(change.previous_path_preview || change.previous_path_hash)}</code>
+                                </div>
+                                <div class="path-lane">
+                                    <strong>Current Route</strong>
+                                    <code>${escapeHtml(change.path_preview || change.path_hash)}</code>
+                                </div>
+                            </div>
+                            <div class="path-change-footer">
+                                <span>${escapeHtml(change.site_id)} · ${escapeHtml(String(change.hop_count))} hops · ${escapeHtml(formatTimestamp(change.timestamp_utc))}</span>
+                                <strong>Open traceroute detail</strong>
+                            </div>
                         </article>
                     `
-                )
+                })
                 .join("");
         }
 
         function renderDetail() {
             const detail = dashboardState.targetDetail;
             const title = document.getElementById("detail-title");
+            const copy = document.getElementById("detail-copy");
             const statusShell = document.getElementById("detail-status-shell");
             const metrics = document.getElementById("detail-metrics");
             const testRail = document.getElementById("detail-test-rail");
@@ -1392,6 +1566,8 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
             if (!detail) {
                 title.textContent = "Waiting for data";
+                copy.textContent =
+                    "Pick an internal or internet target to review its assigned tests, latency trend, recent event feed, and traceroute history in one place.";
                 statusShell.innerHTML = '<div class="badge"><span id="detail-status-label">No target selected</span></div>';
                 metrics.innerHTML = '<article><span>Selection</span><strong>None</strong></article>';
                 testRail.innerHTML = '<div class="empty-state">No tests available.</div>';
@@ -1410,6 +1586,10 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             }
 
             title.textContent = detail.target.fqdn;
+            copy.textContent =
+                detail.target.target_kind === "external"
+                    ? "This view summarizes outbound internet probe behavior for the selected reference endpoint, including internet quality sampling and traceroute drift from the reporting collector."
+                    : "This view summarizes host-level connectivity to the selected internal target. Every address, latency, and recent event shown here represents connectivity to that specific host.";
             statusShell.innerHTML = buildStatusBadge(detail.target.latest_result);
             metrics.innerHTML = [
                 {
@@ -1433,12 +1613,20 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                     value: detail.target.target_kind,
                 },
                 {
+                    label: "Result",
+                    value: detail.target.latest_result,
+                },
+                {
                     label: "Last test",
                     value: detail.target.last_test_type,
                 },
                 {
                     label: "Latency",
                     value: `${formatNumber(detail.target.last_latency_ms)} ms`,
+                },
+                {
+                    label: "Target key",
+                    value: detail.target.target_key,
                 },
             ]
                 .map(
@@ -1455,7 +1643,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 `
                     <button class="test-chip ${dashboardState.selectedTestType === "all" ? "is-active" : ""}" type="button" data-test-type="all">
                         <strong>All tests</strong>
-                        <span>${escapeHtml(String(detail.recentEvents.length || 0))} recent events</span>
+                        <span>${escapeHtml(String(detail.recent_events.length || 0))} recent events</span>
                     </button>
                 `,
                 ...availableTests.map(
@@ -1472,7 +1660,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 ),
             ].join("");
 
-            const visibleEvents = (detail.recentEvents || []).filter(
+            const visibleEvents = (detail.recent_events || []).filter(
                 (event) =>
                     dashboardState.selectedTestType === "all" ||
                     event.test_type === dashboardState.selectedTestType
@@ -1480,7 +1668,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
             eventList.innerHTML = visibleEvents.length
                 ? visibleEvents
-                      .slice(0, 12)
+                      .slice(0, 20)
                       .map(
                           (event) => `
                             <li>
@@ -1488,9 +1676,13 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                                     event.result
                                 )}</strong>
                                 <span>${escapeHtml(event.details || event.error_code || "No details")}</span>
-                                <div class="target-meta wrap-anywhere">${escapeHtml(
-                                    `${event.target_address} · ${formatTimestamp(event.timestamp_utc)}`
-                                )}</div>
+                                <div class="event-meta">
+                                    <span>${escapeHtml(event.target_address)}</span>
+                                    <span>${escapeHtml(formatTimestamp(event.timestamp_utc))}</span>
+                                    <span>${escapeHtml(`${formatNumber(event.latency_ms)} ms`)}</span>
+                                    <span>${escapeHtml(event.error_code || "no error code")}</span>
+                                    <span>${escapeHtml(event.path_hash || "no path hash")}</span>
+                                </div>
                             </li>
                         `
                       )
@@ -1499,14 +1691,17 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
             pathList.innerHTML = detail.paths.length
                 ? detail.paths
+                      .slice(0, 12)
                       .map(
                           (path) => `
                             <li>
                                 <strong class="wrap-anywhere">${escapeHtml(path.path_preview || path.path_hash)}</strong>
-                                <span>${escapeHtml(String(path.hop_count))} hops · ${escapeHtml(
-                                    formatNumber(path.average_hop_latency_ms)
-                                )} ms avg · ${escapeHtml(path.path_hash)}</span>
-                                <div class="target-meta">${escapeHtml(formatTimestamp(path.last_seen_utc))}</div>
+                                <div class="timeline-meta">
+                                    <span>${escapeHtml(String(path.hop_count))} hops</span>
+                                    <span>${escapeHtml(formatNumber(path.average_hop_latency_ms))} ms avg</span>
+                                    <span>${escapeHtml(path.path_hash)}</span>
+                                    <span>${escapeHtml(formatTimestamp(path.last_seen_utc))}</span>
+                                </div>
                             </li>
                         `
                       )
@@ -1524,7 +1719,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
         function drawLatencyChart(series) {
             const chart = document.getElementById("detail-chart");
             const width = 720;
-            const height = 220;
+            const height = 280;
             const paddingX = 24;
             const paddingY = 18;
             const innerWidth = width - paddingX * 2;
@@ -1615,7 +1810,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
         function renderRefreshState() {
             const button = document.getElementById("toggle-refresh-button");
             const stateLabel = document.getElementById("refresh-state");
-            const refreshed = formatAgo(dashboardState.snapshot.refreshedUtc);
+            const refreshed = formatAgo(dashboardState.snapshot.refreshed_utc);
             stateLabel.textContent = dashboardState.autoRefresh ? `Live · ${refreshed}` : `Paused · ${refreshed}`;
             button.textContent = dashboardState.autoRefresh ? "Pause auto-refresh" : "Resume auto-refresh";
             button.classList.toggle("is-paused", !dashboardState.autoRefresh);
@@ -1635,28 +1830,28 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 dashboardState.filters.search = event.target.value;
                 ensureSelectedTarget();
                 renderTargets();
-                await refreshTargetDetail(dashboardState.selectedTargetId);
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
             });
 
             document.getElementById("agent-filter").addEventListener("change", async (event) => {
                 dashboardState.filters.agent = event.target.value;
                 ensureSelectedTarget();
                 renderDashboard();
-                await refreshTargetDetail(dashboardState.selectedTargetId);
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
             });
 
             document.getElementById("site-filter").addEventListener("change", async (event) => {
                 dashboardState.filters.site = event.target.value;
                 ensureSelectedTarget();
                 renderDashboard();
-                await refreshTargetDetail(dashboardState.selectedTargetId);
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
             });
 
             document.getElementById("status-filter").addEventListener("change", async (event) => {
                 dashboardState.filters.status = event.target.value;
                 ensureSelectedTarget();
                 renderDashboard();
-                await refreshTargetDetail(dashboardState.selectedTargetId);
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
             });
 
             document.getElementById("agent-grid").addEventListener("click", async (event) => {
@@ -1669,7 +1864,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 dashboardState.filters.agent = dashboardState.filters.agent === agentId ? "all" : agentId;
                 ensureSelectedTarget();
                 renderDashboard();
-                await refreshTargetDetail(dashboardState.selectedTargetId);
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
             });
 
             document.getElementById("site-rail").addEventListener("click", async (event) => {
@@ -1681,7 +1876,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 dashboardState.filters.site = button.dataset.siteId || "all";
                 ensureSelectedTarget();
                 renderDashboard();
-                await refreshTargetDetail(dashboardState.selectedTargetId);
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
             });
 
             document.getElementById("status-rail").addEventListener("click", async (event) => {
@@ -1693,34 +1888,34 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
                 dashboardState.filters.status = button.dataset.statusId || "all";
                 ensureSelectedTarget();
                 renderDashboard();
-                await refreshTargetDetail(dashboardState.selectedTargetId);
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
             });
 
             const onTargetTableClick = async (event) => {
-                const row = event.target.closest("[data-target-id]");
+                const row = event.target.closest("[data-target-key]");
                 if (!row) {
                     return;
                 }
 
-                dashboardState.selectedTargetId = row.dataset.targetId;
+                dashboardState.selectedTargetKey = row.dataset.targetKey;
                 dashboardState.selectedTestType = "all";
                 renderTargets();
-                await refreshTargetDetail(dashboardState.selectedTargetId);
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
             };
 
             document.getElementById("internal-target-table-body").addEventListener("click", onTargetTableClick);
             document.getElementById("internet-target-table-body").addEventListener("click", onTargetTableClick);
 
             document.getElementById("path-change-list").addEventListener("click", async (event) => {
-                const card = event.target.closest("[data-target-id]");
+                const card = event.target.closest("[data-target-key]");
                 if (!card) {
                     return;
                 }
 
-                dashboardState.selectedTargetId = card.dataset.targetId;
+                dashboardState.selectedTargetKey = card.dataset.targetKey;
                 dashboardState.selectedTestType = "traceroute";
                 renderTargets();
-                await refreshTargetDetail(dashboardState.selectedTargetId);
+                await refreshTargetDetail(dashboardState.selectedTargetKey);
             });
 
             document.getElementById("detail-test-rail").addEventListener("click", (event) => {
@@ -1751,7 +1946,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
             ensureSelectedTarget();
             renderDashboard();
             bindEvents();
-            await refreshTargetDetail(dashboardState.selectedTargetId);
+            await refreshTargetDetail(dashboardState.selectedTargetKey);
             startRefreshLoop();
         }
 
@@ -1765,5 +1960,5 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 def render_dashboard(snapshot: DashboardSnapshot) -> str:
     """Render the built-in PSConnMon dashboard shell."""
 
-    payload = json.dumps(snapshot.model_dump(mode="json", by_alias=True))
+    payload = json.dumps(snapshot.model_dump(mode="json"))
     return DASHBOARD_TEMPLATE.replace("__INITIAL_DATA__", payload)

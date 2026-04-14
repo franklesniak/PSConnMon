@@ -333,7 +333,7 @@ class StorageRepository:
                 SELECT
                     COUNT(*) AS total_events,
                     COUNT(DISTINCT agent_id) AS total_agents,
-                    COUNT(DISTINCT target_id) AS total_targets,
+                    COUNT(DISTINCT agent_id || '::' || target_id) AS total_targets,
                     COUNT(DISTINCT site_id) AS active_sites,
                     SUM(CASE WHEN result IN ('FAILURE', 'FATAL') THEN 1 ELSE 0 END) AS failure_events,
                     SUM(CASE WHEN result = 'TIMEOUT' THEN 1 ELSE 0 END) AS timeout_events,
@@ -357,8 +357,15 @@ class StorageRepository:
         query = """
             WITH ranked AS (
                 SELECT
+                    agent_id || '::' || target_id AS target_key,
                     target_id,
-                    COALESCE(json_extract_string(metadata, '$.targetKind'), 'internal') AS target_kind,
+                    COALESCE(
+                        json_extract_string(metadata, '$.targetKind'),
+                        CASE
+                            WHEN target_id LIKE 'internet-%' THEN 'external'
+                            ELSE 'internal'
+                        END
+                    ) AS target_kind,
                     agent_id,
                     fqdn,
                     site_id,
@@ -367,14 +374,28 @@ class StorageRepository:
                     result,
                     latency_ms,
                     timestamp_utc,
-                    ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp_utc DESC) AS row_number
+                    ROW_NUMBER() OVER (
+                        PARTITION BY agent_id, target_id
+                        ORDER BY timestamp_utc DESC
+                    ) AS row_number
                 FROM events
                 WHERE result <> 'INFO'
             )
-            SELECT target_id, target_kind, agent_id, fqdn, site_id, target_address, test_type, result, latency_ms, timestamp_utc
+            SELECT
+                target_key,
+                target_id,
+                target_kind,
+                agent_id,
+                fqdn,
+                site_id,
+                target_address,
+                test_type,
+                result,
+                latency_ms,
+                timestamp_utc
             FROM ranked
             WHERE row_number = 1
-            ORDER BY target_kind, fqdn
+            ORDER BY target_kind, fqdn, agent_id
         """
 
         with self._connect() as connection:
@@ -382,16 +403,17 @@ class StorageRepository:
 
         return [
             TargetSummary(
-                target_id=row[0],
-                target_kind=row[1],
-                agent_id=row[2],
-                fqdn=row[3],
-                site_id=row[4],
-                target_address=row[5],
-                last_test_type=row[6],
-                latest_result=row[7],
-                last_latency_ms=row[8],
-                last_timestamp_utc=row[9],
+                target_key=row[0],
+                target_id=row[1],
+                target_kind=row[2],
+                agent_id=row[3],
+                fqdn=row[4],
+                site_id=row[5],
+                target_address=row[6],
+                last_test_type=row[7],
+                latest_result=row[8],
+                last_latency_ms=row[9],
+                last_timestamp_utc=row[10],
             )
             for row in rows
         ]
@@ -460,7 +482,7 @@ class StorageRepository:
                     latency_ms,
                     timestamp_utc,
                     ROW_NUMBER() OVER (
-                        PARTITION BY site_id, target_id
+                        PARTITION BY site_id, agent_id, target_id
                         ORDER BY timestamp_utc DESC
                     ) AS row_number
                 FROM events
@@ -500,8 +522,16 @@ class StorageRepository:
         query = """
             WITH latest_hops AS (
                 SELECT
+                    agent_id || '::' || target_id AS target_key,
                     target_id,
-                    COALESCE(json_extract_string(metadata, '$.targetKind'), 'internal') AS target_kind,
+                    COALESCE(
+                        json_extract_string(metadata, '$.targetKind'),
+                        CASE
+                            WHEN target_id LIKE 'internet-%' THEN 'external'
+                            ELSE 'internal'
+                        END
+                    ) AS target_kind,
+                    agent_id,
                     fqdn,
                     COALESCE(path_hash, 'unknown') AS path_hash,
                     hop_index,
@@ -509,15 +539,17 @@ class StorageRepository:
                     hop_latency_ms,
                     timestamp_utc,
                     ROW_NUMBER() OVER (
-                        PARTITION BY target_id, COALESCE(path_hash, 'unknown'), hop_index
+                        PARTITION BY agent_id, target_id, COALESCE(path_hash, 'unknown'), hop_index
                         ORDER BY timestamp_utc DESC
                     ) AS row_number
                 FROM events
                 WHERE test_type = 'traceroute' AND hop_index IS NOT NULL
             )
             SELECT
+                target_key,
                 target_id,
                 target_kind,
+                agent_id,
                 fqdn,
                 path_hash,
                 string_agg(hop_label, ' -> ' ORDER BY hop_index) AS path_preview,
@@ -526,8 +558,8 @@ class StorageRepository:
                 AVG(hop_latency_ms) AS average_hop_latency_ms
             FROM latest_hops
             WHERE row_number = 1
-            GROUP BY target_id, target_kind, fqdn, path_hash
-            ORDER BY target_kind, fqdn, last_seen_utc DESC
+            GROUP BY target_key, target_id, target_kind, agent_id, fqdn, path_hash
+            ORDER BY target_kind, fqdn, agent_id, last_seen_utc DESC
         """
 
         with self._connect() as connection:
@@ -535,14 +567,15 @@ class StorageRepository:
 
         return [
             PathSummary(
-                target_id=row[0],
-                target_kind=row[1],
-                fqdn=row[2],
-                path_hash=row[3],
-                path_preview=row[4] or "",
-                last_seen_utc=row[5],
-                hop_count=int(row[6] or 0),
-                average_hop_latency_ms=row[7],
+                target_key=row[0],
+                target_id=row[1],
+                target_kind=row[2],
+                fqdn=row[4],
+                path_hash=row[5],
+                path_preview=row[6] or "",
+                last_seen_utc=row[7],
+                hop_count=int(row[8] or 0),
+                average_hop_latency_ms=row[9],
             )
             for row in rows
         ]
@@ -552,6 +585,7 @@ class StorageRepository:
 
         query = """
             SELECT
+                agent_id || '::' || target_id AS target_key,
                 target_id,
                 fqdn,
                 test_type,
@@ -570,13 +604,14 @@ class StorageRepository:
 
         return [
             IncidentSummary(
-                target_id=row[0],
-                fqdn=row[1],
-                test_type=row[2],
-                result=row[3],
-                error_code=row[4],
-                details=row[5],
-                timestamp_utc=self._normalize_timestamp(row[6]),
+                target_key=row[0],
+                target_id=row[1],
+                fqdn=row[2],
+                test_type=row[3],
+                result=row[4],
+                error_code=row[5],
+                details=row[6],
+                timestamp_utc=self._normalize_timestamp(row[7]),
             )
             for row in rows
         ]
@@ -587,8 +622,15 @@ class StorageRepository:
         query = """
             WITH latest_hops AS (
                 SELECT
+                    agent_id || '::' || target_id AS target_key,
                     target_id,
-                    COALESCE(json_extract_string(metadata, '$.targetKind'), 'internal') AS target_kind,
+                    COALESCE(
+                        json_extract_string(metadata, '$.targetKind'),
+                        CASE
+                            WHEN target_id LIKE 'internet-%' THEN 'external'
+                            ELSE 'internal'
+                        END
+                    ) AS target_kind,
                     fqdn,
                     site_id,
                     agent_id,
@@ -597,7 +639,7 @@ class StorageRepository:
                     COALESCE(hop_name, hop_address, '*') AS hop_label,
                     timestamp_utc,
                     ROW_NUMBER() OVER (
-                        PARTITION BY target_id, COALESCE(path_hash, 'unknown'), hop_index
+                        PARTITION BY agent_id, target_id, COALESCE(path_hash, 'unknown'), hop_index
                         ORDER BY timestamp_utc DESC
                     ) AS row_number
                 FROM events
@@ -605,6 +647,7 @@ class StorageRepository:
             ),
             per_path AS (
                 SELECT
+                    target_key,
                     target_id,
                     target_kind,
                     fqdn,
@@ -616,10 +659,11 @@ class StorageRepository:
                     COUNT(*) AS hop_count
                 FROM latest_hops
                 WHERE row_number = 1
-                GROUP BY target_id, target_kind, fqdn, site_id, agent_id, path_hash
+                GROUP BY target_key, target_id, target_kind, fqdn, site_id, agent_id, path_hash
             ),
             ordered AS (
                 SELECT
+                    target_key,
                     target_id,
                     target_kind,
                     fqdn,
@@ -630,17 +674,17 @@ class StorageRepository:
                     hop_count,
                     timestamp_utc,
                     LAG(path_hash) OVER (
-                        PARTITION BY target_id
+                        PARTITION BY target_key
                         ORDER BY timestamp_utc
-                    ) AS previous_path_hash
-                    ,
+                    ) AS previous_path_hash,
                     LAG(path_preview) OVER (
-                        PARTITION BY target_id
+                        PARTITION BY target_key
                         ORDER BY timestamp_utc
                     ) AS previous_path_preview
                 FROM per_path
             )
             SELECT
+                target_key,
                 target_id,
                 target_kind,
                 fqdn,
@@ -663,32 +707,37 @@ class StorageRepository:
 
         return [
             PathChangeSummary(
-                target_id=row[0],
-                target_kind=row[1],
-                fqdn=row[2],
-                site_id=row[3],
-                agent_id=row[4],
-                previous_path_hash=row[5],
-                previous_path_preview=row[6] or "",
-                path_hash=row[7],
-                path_preview=row[8] or "",
-                hop_count=int(row[9] or 0),
-                timestamp_utc=self._normalize_timestamp(row[10]),
+                target_key=row[0],
+                target_id=row[1],
+                target_kind=row[2],
+                fqdn=row[3],
+                site_id=row[4],
+                agent_id=row[5],
+                previous_path_hash=row[6],
+                previous_path_preview=row[7] or "",
+                path_hash=row[8],
+                path_preview=row[9] or "",
+                hop_count=int(row[10] or 0),
+                timestamp_utc=self._normalize_timestamp(row[11]),
             )
             for row in rows
         ]
 
-    def get_target_detail(self, target_id: str, timeline_limit: int = 48) -> TargetDetail | None:
+    def get_target_detail(self, target_key: str, timeline_limit: int = 48) -> TargetDetail | None:
         """Return a detailed drilldown payload for one target."""
 
-        targets = [target for target in self.list_targets() if target.target_id == target_id]
+        agent_id, separator, target_id = target_key.partition("::")
+        if not separator or not agent_id or not target_id:
+            return None
+
+        targets = [target for target in self.list_targets() if target.target_key == target_key]
         if not targets:
             return None
 
         timeline_query = """
             SELECT timestamp_utc, latency_ms, result, test_type
             FROM events
-            WHERE target_id = ? AND latency_ms IS NOT NULL
+            WHERE agent_id = ? AND target_id = ? AND latency_ms IS NOT NULL
             ORDER BY timestamp_utc DESC
             LIMIT ?
         """
@@ -707,7 +756,7 @@ class StorageRepository:
                         ORDER BY timestamp_utc DESC
                     ) AS row_number
                 FROM events
-                WHERE target_id = ? AND result <> 'INFO'
+                WHERE agent_id = ? AND target_id = ? AND result <> 'INFO'
             )
             SELECT
                 test_type,
@@ -737,15 +786,22 @@ class StorageRepository:
                 hop_address,
                 metadata
             FROM events
-            WHERE target_id = ?
+            WHERE agent_id = ? AND target_id = ?
             ORDER BY timestamp_utc DESC
             LIMIT 80
         """
         path_query = """
             WITH latest_hops AS (
                 SELECT
+                    agent_id || '::' || target_id AS target_key,
                     target_id,
-                    COALESCE(json_extract_string(metadata, '$.targetKind'), 'internal') AS target_kind,
+                    COALESCE(
+                        json_extract_string(metadata, '$.targetKind'),
+                        CASE
+                            WHEN target_id LIKE 'internet-%' THEN 'external'
+                            ELSE 'internal'
+                        END
+                    ) AS target_kind,
                     fqdn,
                     COALESCE(path_hash, 'unknown') AS path_hash,
                     hop_index,
@@ -753,13 +809,14 @@ class StorageRepository:
                     hop_latency_ms,
                     timestamp_utc,
                     ROW_NUMBER() OVER (
-                        PARTITION BY target_id, COALESCE(path_hash, 'unknown'), hop_index
+                        PARTITION BY agent_id, target_id, COALESCE(path_hash, 'unknown'), hop_index
                         ORDER BY timestamp_utc DESC
                     ) AS row_number
                 FROM events
-                WHERE target_id = ? AND test_type = 'traceroute' AND hop_index IS NOT NULL
+                WHERE agent_id = ? AND target_id = ? AND test_type = 'traceroute' AND hop_index IS NOT NULL
             )
             SELECT
+                target_key,
                 target_id,
                 target_kind,
                 fqdn,
@@ -770,7 +827,7 @@ class StorageRepository:
                 AVG(hop_latency_ms) AS average_hop_latency_ms
             FROM latest_hops
             WHERE row_number = 1
-            GROUP BY target_id, target_kind, fqdn, path_hash
+            GROUP BY target_key, target_id, target_kind, fqdn, path_hash
             ORDER BY last_seen_utc DESC
             LIMIT 8
         """
@@ -784,19 +841,21 @@ class StorageRepository:
                 details,
                 timestamp_utc
             FROM events
-            WHERE target_id = ? AND result NOT IN ('SUCCESS', 'INFO')
+            WHERE agent_id = ? AND target_id = ? AND result NOT IN ('SUCCESS', 'INFO')
             ORDER BY timestamp_utc DESC
             LIMIT 12
         """
 
         with self._connect() as connection:
             timeline_rows = connection.execute(
-                timeline_query, [target_id, timeline_limit]
+                timeline_query, [agent_id, target_id, timeline_limit]
             ).fetchall()
-            test_rows = connection.execute(test_query, [target_id]).fetchall()
-            recent_event_rows = connection.execute(recent_event_query, [target_id]).fetchall()
-            path_rows = connection.execute(path_query, [target_id]).fetchall()
-            incident_rows = connection.execute(incident_query, [target_id]).fetchall()
+            test_rows = connection.execute(test_query, [agent_id, target_id]).fetchall()
+            recent_event_rows = connection.execute(
+                recent_event_query, [agent_id, target_id]
+            ).fetchall()
+            path_rows = connection.execute(path_query, [agent_id, target_id]).fetchall()
+            incident_rows = connection.execute(incident_query, [agent_id, target_id]).fetchall()
 
         return TargetDetail(
             target=targets[0],
@@ -841,6 +900,7 @@ class StorageRepository:
             ],
             incidents=[
                 IncidentSummary(
+                    target_key=f"{agent_id}::{row[0]}",
                     target_id=row[0],
                     fqdn=row[1],
                     test_type=row[2],
@@ -853,14 +913,15 @@ class StorageRepository:
             ],
             paths=[
                 PathSummary(
-                    target_id=row[0],
-                    target_kind=row[1],
-                    fqdn=row[2],
-                    path_hash=row[3],
-                    path_preview=row[4] or "",
-                    last_seen_utc=row[5],
-                    hop_count=int(row[6] or 0),
-                    average_hop_latency_ms=row[7],
+                    target_key=row[0],
+                    target_id=row[1],
+                    target_kind=row[2],
+                    fqdn=row[3],
+                    path_hash=row[4],
+                    path_preview=row[5] or "",
+                    last_seen_utc=row[6],
+                    hop_count=int(row[7] or 0),
+                    average_hop_latency_ms=row[8],
                 )
                 for row in path_rows
             ],

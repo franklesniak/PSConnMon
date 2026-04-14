@@ -54,6 +54,7 @@ def test_dashboard_renders_live_board_shell() -> None:
             ],
             targets=[
                 TargetSummary(
+                    target_key="agent-01::target-01",
                     target_id="target-01",
                     target_kind="internal",
                     agent_id="agent-01",
@@ -68,6 +69,7 @@ def test_dashboard_renders_live_board_shell() -> None:
             ],
             paths=[
                 PathSummary(
+                    target_key="agent-01::target-01",
                     target_id="target-01",
                     target_kind="internal",
                     fqdn="target.local",

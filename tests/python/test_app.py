@@ -85,7 +85,7 @@ def test_dashboard_and_import_endpoints(tmp_path: Path) -> None:
         assert targets_response.json()[0]["fqdn"] == "fs01.corp.local"
         assert targets_response.json()[0]["agent_id"] == "branch-01"
 
-        target_detail_response = client.get("/api/v1/targets/fs01")
+        target_detail_response = client.get("/api/v1/targets/branch-01%3A%3Afs01")
         assert target_detail_response.status_code == 200
         assert target_detail_response.json()["target"]["fqdn"] == "fs01.corp.local"
 
@@ -197,6 +197,6 @@ def test_domain_auth_events_surface_without_special_casing(tmp_path: Path) -> No
         assert targets_response.status_code == 200
         assert targets_response.json()[0]["last_test_type"] == "domainAuth"
 
-        target_detail_response = client.get("/api/v1/targets/dc01")
+        target_detail_response = client.get("/api/v1/targets/pi-branch-01%3A%3Adc01")
         assert target_detail_response.status_code == 200
         assert target_detail_response.json()["target"]["last_test_type"] == "domainAuth"

@@ -83,15 +83,15 @@ def create_app(
             "failed": sum(source.last_run_failed for source in status.sources),
         }
 
-    @app.get("/api/v1/import/status", response_model=ImportStatus)
+    @app.get("/api/v1/import/status", response_model=ImportStatus, response_model_by_alias=False)
     def get_import_status() -> ImportStatus:
         return repository.get_import_status(resolved_settings.import_mode)
 
-    @app.get("/api/v1/summary", response_model=FleetSummary)
+    @app.get("/api/v1/summary", response_model=FleetSummary, response_model_by_alias=False)
     def get_summary() -> FleetSummary:
         return repository.get_fleet_summary()
 
-    @app.get("/api/v1/dashboard", response_model=DashboardSnapshot)
+    @app.get("/api/v1/dashboard", response_model=DashboardSnapshot, response_model_by_alias=False)
     def get_dashboard_snapshot() -> DashboardSnapshot:
         return build_dashboard_snapshot()
 
@@ -107,11 +107,11 @@ def create_app(
     def get_targets() -> list[dict[str, object]]:
         return [target.model_dump(mode="json") for target in repository.list_targets()]
 
-    @app.get("/api/v1/targets/{target_id}", response_model=TargetDetail)
-    def get_target_detail(target_id: str) -> TargetDetail:
-        detail = repository.get_target_detail(target_id)
+    @app.get("/api/v1/targets/{target_key}", response_model=TargetDetail, response_model_by_alias=False)
+    def get_target_detail(target_key: str) -> TargetDetail:
+        detail = repository.get_target_detail(target_key)
         if detail is None:
-            raise HTTPException(status_code=404, detail=f"Unknown target '{target_id}'.")
+            raise HTTPException(status_code=404, detail=f"Unknown target '{target_key}'.")
         return detail
 
     @app.get("/api/v1/paths")

@@ -125,6 +125,7 @@ class FleetSummary(CompatBaseModel):
 class TargetSummary(CompatBaseModel):
     """Aggregated state for one target."""
 
+    target_key: str = Field(alias="targetKey")
     target_id: str
     target_kind: str = Field(alias="targetKind")
     agent_id: str
@@ -140,6 +141,7 @@ class TargetSummary(CompatBaseModel):
 class PathSummary(CompatBaseModel):
     """Traceroute/path-change summary for one target."""
 
+    target_key: str = Field(alias="targetKey")
     target_id: str
     target_kind: str = Field(alias="targetKind")
     fqdn: str
@@ -153,6 +155,7 @@ class PathSummary(CompatBaseModel):
 class IncidentSummary(CompatBaseModel):
     """Failure summary for the dashboard incident list."""
 
+    target_key: str = Field(alias="targetKey")
     target_id: str
     fqdn: str
     test_type: str
@@ -198,6 +201,7 @@ class LatencyPoint(CompatBaseModel):
 class PathChangeSummary(CompatBaseModel):
     """A detected traceroute path transition for one target."""
 
+    target_key: str = Field(alias="targetKey")
     target_id: str
     target_kind: str = Field(alias="targetKind")
     fqdn: str

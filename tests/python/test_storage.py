@@ -48,6 +48,7 @@ def test_storage_ingests_and_summarizes_events(tmp_path: Path) -> None:
     assert summary.total_targets == 1
     assert targets[0].fqdn == "fs01.corp.local"
     assert targets[0].agent_id == "branch-01"
+    assert targets[0].target_key == "branch-01::fs01"
     assert agents[0].agent_id == "branch-01"
 
 
@@ -230,12 +231,77 @@ def test_storage_separates_internet_targets_and_exposes_drilldown_data(tmp_path:
 
     repository.ingest_events(events)
     targets = repository.list_targets()
-    detail = repository.get_target_detail("internet-cloudflare")
+    detail = repository.get_target_detail("branch-01::internet-cloudflare")
     paths = repository.list_paths()
 
     assert targets[0].target_kind == "external"
+    assert targets[0].target_key == "branch-01::internet-cloudflare"
     assert detail is not None
     assert detail.target.target_kind == "external"
     assert {test.test_type for test in detail.tests} == {"internetQuality", "traceroute"}
     assert detail.recent_events[0].metadata["targetClass"] == "internet"
     assert paths[0].path_preview == "10.0.100.1"
+
+
+def test_storage_keeps_same_target_id_separate_per_agent(tmp_path: Path) -> None:
+    """Targets with the same ID on different agents should not collapse together."""
+
+    repository = StorageRepository(tmp_path / "psconnmon.duckdb")
+    events = [
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:00:00Z",
+                "agentId": "branch-01",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "ping",
+                "probeName": "Ping.Primary",
+                "result": "SUCCESS",
+                "latencyMs": 12.5,
+                "loss": 0.0,
+                "errorCode": None,
+                "details": "Reply from 10.10.20.15",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+        EventRecord.model_validate(
+            {
+                "timestampUtc": "2026-04-09T12:01:00Z",
+                "agentId": "branch-02",
+                "siteId": "site-a",
+                "targetId": "fs01",
+                "fqdn": "fs01.corp.local",
+                "targetAddress": "10.10.20.15",
+                "testType": "share",
+                "probeName": "Share.Access",
+                "result": "SUCCESS",
+                "latencyMs": None,
+                "loss": None,
+                "errorCode": None,
+                "details": "Share access confirmed.",
+                "dnsServer": None,
+                "hopIndex": None,
+                "hopAddress": None,
+                "hopName": None,
+                "hopLatencyMs": None,
+                "pathHash": None,
+                "metadata": {},
+            }
+        ),
+    ]
+
+    repository.ingest_events(events)
+
+    summary = repository.get_fleet_summary()
+    targets = repository.list_targets()
+
+    assert summary.total_targets == 2
+    assert {target.target_key for target in targets} == {"branch-01::fs01", "branch-02::fs01"}
