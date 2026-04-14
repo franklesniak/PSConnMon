@@ -136,12 +136,6 @@ This repository uses modular instruction files for language-specific standards:
 
 **Note:** The PowerShell instructions include comprehensive guidance on Pester testing.
 
-**To customize for your project:**
-
-- Remove instruction files for languages you don't use
-- Add new instruction files for additional languages as needed
-- Update this table to reflect your project's languages
-
 ## Agent Instruction Files
 
 This repository includes agent instruction files at the repository root to support multi-platform AI coding agents:
@@ -155,11 +149,6 @@ This repository includes agent instruction files at the repository root to suppo
 `.github/copilot-instructions.md` remains the **canonical source of truth** for all repository rules. The root agent instruction files are thin entry points: each keeps a minimal inline summary of the highest-priority shared rules for reliability and may add platform-specific guidance that does not conflict with this file.
 
 When modifying high-priority shared guidance in `.github/copilot-instructions.md` (for example, canonical file location, safety rules, pre-commit expectations, validation commands, or language-instruction references), update the minimal summaries in any remaining agent files as needed. Avoid copying large shared sections into the entry point files.
-
-**To customize for your project:**
-
-- Remove agent files for platforms you do not use
-- Keep the remaining agent files limited to minimal inline summaries plus any necessary platform-specific guidance
 
 ## Linting Configurations
 
