@@ -36,6 +36,8 @@ tests:
   tracerouteProbeTimeoutSeconds: 3
   internetQualitySampleCount: 5
 auth:
+  linuxSmbMode: currentContext
+  secretReference: ''
   linuxProfiles:
     - id: dc-keytab
       mode: kerberosKeytab

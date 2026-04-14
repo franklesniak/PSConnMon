@@ -68,8 +68,8 @@ def create_app(
             paths=repository.list_paths(),
             path_changes=repository.list_path_changes(),
             incidents=repository.list_incidents(),
-            importStatus=repository.get_import_status(resolved_settings.import_mode),
-            refreshedUtc=datetime.now(timezone.utc),
+            import_status=repository.get_import_status(resolved_settings.import_mode),
+            refreshed_utc=datetime.now(timezone.utc),
         )
 
     @app.get("/healthz")

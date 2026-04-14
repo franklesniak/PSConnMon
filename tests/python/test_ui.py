@@ -86,7 +86,7 @@ def test_dashboard_renders_live_board_shell() -> None:
             ],
             path_changes=[],
             incidents=[],
-            importStatus=ImportStatus(
+            import_status=ImportStatus(
                 mode="local",
                 last_run_utc=datetime.now(timezone.utc),
                 last_success_utc=datetime.now(timezone.utc),
@@ -97,7 +97,7 @@ def test_dashboard_renders_live_board_shell() -> None:
                 failed=0,
                 sources=[],
             ),
-            refreshedUtc=datetime.now(timezone.utc),
+            refreshed_utc=datetime.now(timezone.utc),
         )
     )
 

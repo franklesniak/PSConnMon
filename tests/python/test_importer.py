@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from _pytest.monkeypatch import MonkeyPatch
+from pytest import MonkeyPatch
 
 from psconnmon_service.config import ServiceSettings
 from psconnmon_service.importer import ImportBatch, ImportManager

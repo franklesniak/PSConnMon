@@ -73,14 +73,14 @@ class EventRecord(CompatBaseModel):
     latency_ms: float | None = Field(default=None, alias="latencyMs")
     loss: float | None = None
     error_code: str | None = Field(default=None, alias="errorCode")
-    details: str = ""
+    details: str
     dns_server: str | None = Field(default=None, alias="dnsServer")
     hop_index: int | None = Field(default=None, alias="hopIndex")
     hop_address: str | None = Field(default=None, alias="hopAddress")
     hop_name: str | None = Field(default=None, alias="hopName")
     hop_latency_ms: float | None = Field(default=None, alias="hopLatencyMs")
     path_hash: str | None = Field(default=None, alias="pathHash")
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any]
 
     @field_validator("timestamp_utc")
     @classmethod
