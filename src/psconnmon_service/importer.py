@@ -198,10 +198,16 @@ class ImportManager:
         if self.settings.import_mode == "azure":
             return [AzureBlobBatchSource(self.settings)]
 
-        return [
-            LocalBatchSource(self.settings.import_local_path),
-            AzureBlobBatchSource(self.settings),
-        ]
+        if self.settings.import_mode == "hybrid":
+            return [
+                LocalBatchSource(self.settings.import_local_path),
+                AzureBlobBatchSource(self.settings),
+            ]
+
+        raise ValueError(
+            f"Unsupported import_mode '{self.settings.import_mode}'. "
+            "Expected one of: 'disabled', 'local', 'azure', 'hybrid'."
+        )
 
     def _import_source(self, source: BatchSource) -> None:
         """Import all discoverable batches for one source and persist status."""

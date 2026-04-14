@@ -11,15 +11,122 @@
     },
     "agent": {
       "type": "object",
-      "required": ["agentId", "siteId", "spoolDirectory", "batchSize", "publishIntervalSeconds", "configPollIntervalSeconds", "cycleIntervalSeconds", "maxRuntimeMinutes", "cleanupAfterDays"]
+      "required": ["agentId", "siteId", "spoolDirectory", "batchSize", "publishIntervalSeconds", "configPollIntervalSeconds", "cycleIntervalSeconds", "maxRuntimeMinutes", "cleanupAfterDays"],
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "siteId": {
+          "type": "string"
+        },
+        "spoolDirectory": {
+          "type": "string"
+        },
+        "batchSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "publishIntervalSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "configPollIntervalSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cycleIntervalSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxRuntimeMinutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cleanupAfterDays": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     },
     "publish": {
       "type": "object",
-      "required": ["mode", "format", "csvMirror", "azure"]
+      "required": ["mode", "format", "csvMirror", "azure"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["local", "azure", "hybrid"]
+        },
+        "format": {
+          "type": "string",
+          "enum": ["jsonl"]
+        },
+        "csvMirror": {
+          "type": "boolean"
+        },
+        "azure": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "accountName": {
+              "type": "string"
+            },
+            "containerName": {
+              "type": "string"
+            },
+            "blobPrefix": {
+              "type": "string"
+            },
+            "configBlobPath": {
+              "type": "string"
+            },
+            "authMode": {
+              "type": "string",
+              "enum": ["managedIdentity", "sasToken"]
+            },
+            "sasToken": {
+              "type": "string"
+            }
+          }
+        }
+      }
     },
     "tests": {
       "type": "object",
-      "required": ["enabled", "pingTimeoutMs", "pingPacketSize", "shareAccessTimeoutSeconds", "tracerouteTimeoutSeconds", "tracerouteProbeTimeoutSeconds", "internetQualitySampleCount"]
+      "required": ["enabled", "pingTimeoutMs", "pingPacketSize", "shareAccessTimeoutSeconds", "tracerouteTimeoutSeconds", "tracerouteProbeTimeoutSeconds", "internetQualitySampleCount"],
+      "properties": {
+        "enabled": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pingTimeoutMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pingPacketSize": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "shareAccessTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tracerouteTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tracerouteProbeTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "internetQualitySampleCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     },
     "auth": {
       "type": "object",

@@ -21,7 +21,7 @@ else:
 
         def field_validator(
             *fields: str, **kwargs: object
-        ) -> Callable[[Callable[..., Any]], classmethod[Any, Any, Any]]:
+        ) -> Callable[[Callable[..., Any]], Any]:
             """Provide a Pydantic v2-style validator decorator on top of v1."""
 
             return _validator(*fields, **kwargs)
