@@ -1,70 +1,122 @@
+# PSConnMon summit demo sample for the Windows collector.
+
+# Config schema version expected by the PowerShell collector.
 schemaVersion: '1.0'
+
 agent:
+  # Unique collector identity written into every emitted event.
   agentId: win-branch-01
+  # Logical site/location grouping used by the dashboard.
   siteId: branch-a
+  # Local working directory for staged batches, imported config, and cleanup.
   spoolDirectory: C:\ProgramData\PSConnMon\spool
+  # Maximum number of events to write into one outbound batch file.
   batchSize: 250
+  # How often the collector publishes completed batches.
   publishIntervalSeconds: 30
+  # How often the collector checks blob storage for a newer config file.
   configPollIntervalSeconds: 300
+  # How often a full monitoring cycle starts.
   cycleIntervalSeconds: 30
+  # Zero means run continuously with no forced process exit window.
   maxRuntimeMinutes: 0
+  # Age threshold for removing old local spool artifacts.
   cleanupAfterDays: 7
+
 publish:
+  # Active publishing backend for this collector.
   mode: azure
+  # Event serialization format uploaded to storage.
   format: jsonl
+  # Keep CSV mirroring disabled for the summit demo.
   csvMirror: false
   azure:
+    # Enables Azure Blob publishing.
     enabled: true
+    # Destination storage account for telemetry and config blobs.
     accountName: psconnmondemo01
+    # Container that stores both event batches and config files.
     containerName: telemetry
+    # Prefix used for this generation of summit event uploads.
     blobPrefix: events-v2
+    # Remote config blob path this collector polls for updates.
     configBlobPath: configs/win-branch-01.psconnmon.yaml
+    # Collector authenticates to blob storage with a SAS token.
     authMode: sasToken
-    sasToken: 'sp=racwdl&st=2026-04-13T20:52:42Z&se=2026-04-17T05:07:42Z&spr=https&sv=2025-11-05&sr=c&sig=IjTiTM%2BFSBNBhoUs6l7kblXcmhiSXdi4qxmAjmzRO4I%3D'
+    # Demo SAS token currently used by the collector.
+    sasToken: ''
+
 tests:
+  # Global allowlist of probe types this collector runtime supports.
   enabled:
     - ping
     - dns
     - share
     - internetQuality
     - traceroute
+  # Native ping timeout per attempt.
   pingTimeoutMs: 3000
+  # ICMP payload size for ping and internet-quality probes.
   pingPacketSize: 56
+  # Total timeout for one SMB/share access probe.
   shareAccessTimeoutSeconds: 15
+  # Overall timeout for the traceroute job.
   tracerouteTimeoutSeconds: 180
+  # Per-hop wait time passed to Windows tracert.
   tracerouteProbeTimeoutSeconds: 3
+  # Number of samples used by the internet quality probe.
   internetQualitySampleCount: 5
+
 auth:
+  # Present for schema parity; Windows share access uses the task's Windows context.
   linuxSmbMode: currentContext
+  # Unused top-level legacy secret reference; kept empty on purpose.
   secretReference: ''
+
 targets:
-  - id: FISHDC01
-    fqdn: FISHDC01.INTERNAL.BLAKECHERRY.COM
-    address: 10.0.100.20
+  # Internal target: the domain controller / core branch service.
+  - id: DC01
+    # Displayed host name and lookup target.
+    fqdn: DC01.CONTOSO.COM
+    # Address the collector should probe for host-level tests.
+    address: 10.0.0.10
     roles: [domain-controller]
     tags: [core, auth]
-    dnsServers: [10.0.100.20]
+    # DNS resolvers to query for this target's DNS test.
+    dnsServers: [10.0.0.10]
     shares:
+      # Friendly share identifier rendered in event metadata.
       - id: sysvol
-        path: '\\FISHDC01.INTERNAL.BLAKECHERRY.COM\SYSVOL'
+        # UNC path checked by the share probe.
+        path: '\\DC01.CONTOSO.COM\SYSVOL'
+    # Only these tests run against this internal target.
     tests: [ping, dns, share]
-  - id: BlakeR710
-    fqdn: Blake-R710.local
+
+  # Internal target: non-domain file server validated through the task's SMB context.
+  - id: R710
+    fqdn: R710.local
     address: 10.0.100.10
     roles: [fileserver]
     tags: [non-domain]
-    dnsServers: [10.0.100.20]
+    dnsServers: [10.0.0.10]
     shares:
       - id: public
         path: '\\10.0.100.10\isos'
     tests: [ping, share]
+
+# Internet targets are separate from internal hosts.
+# They represent outbound path and latency checks from this collector.
 internetTargets:
   - id: internet-cloudflare
+    # Friendly display name shown in the dashboard.
     name: Cloudflare DNS
+    # Internet endpoint used for latency and traceroute from this site.
     address: 1.1.1.1
     tests: [internetQuality, traceroute]
   - id: internet-google
     name: Google DNS
     address: 8.8.8.8
     tests: [internetQuality, traceroute]
+
+# No custom extension probes are enabled for the summit demo.
 extensions: []
